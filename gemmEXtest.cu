@@ -5,13 +5,8 @@
 #include <cublas_v2.h>
 #include <iostream>
 
-// struct Cxint8_t {
-// 	char x;
-// 	char y;
-// };
 
-// typedef struct Cxint8_t Cxint8_t;
-typedef char2 Cxint8_t;
+typedef char2 CxInt8_t;
 
 
 // C-style indexing
@@ -31,7 +26,7 @@ int main(void)
 
 	std::cout << "hello " << std::endl;
 
-	Cxint8_t test;
+	CxInt8_t test;
 
 	test.x = -1;
 	test.y = 3;
@@ -39,8 +34,8 @@ int main(void)
 	std::cout << "test: " << (int) test.x << "y: " << (int) test.y << std::endl;
 
 
-	Cxint8_t *D = new Cxint8_t[rowD * colD];
-	Cxint8_t *E = new Cxint8_t[rowE * colE];
+	CxInt8_t *D = new CxInt8_t[rowD * colD];
+	CxInt8_t *E = new CxInt8_t[rowE * colE];
 	cuComplex *F = new cuComplex[rowF * colF];
 
 	
@@ -79,14 +74,14 @@ int main(void)
 		std::cerr << "!!!! CUBLAS initialization error\n";
 	}
 
-	Cxint8_t *d_D, *d_E;
+	CxInt8_t *d_D, *d_E;
 	cuComplex *d_F;
-	cudaMalloc(&d_D, rowD * colD*sizeof(Cxint8_t));
-	cudaMalloc(&d_E, rowE * colE*sizeof(Cxint8_t));
+	cudaMalloc(&d_D, rowD * colD*sizeof(CxInt8_t));
+	cudaMalloc(&d_E, rowE * colE*sizeof(CxInt8_t));
 	cudaMalloc(&d_F, rowF * colF*sizeof(cuComplex));
 
-	cudaMemcpy(d_D, D, rowD * colD*sizeof(Cxint8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_E, E, rowE * colE*sizeof(Cxint8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_D, D, rowD * colD*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(d_E, E, rowE * colE*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
 	cudaMemcpy(d_F, F, rowF * colF*sizeof(cuComplex), cudaMemcpyHostToDevice);
 
 	cuComplex alpha;

@@ -1,3 +1,3 @@
 # DSAbeamformer
 
-GPU implementation of beamformer for the DSA project
+GPU implementation of a beamformer for the DSA project

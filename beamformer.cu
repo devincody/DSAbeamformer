@@ -8,7 +8,10 @@
 #define N_FREQUENCIES 256
 #define N_AVERAGING 16
 #define N_TIMESTEPS_PER_CALL 64
+#define N_POL 2
+#define N_CX 2
 #define N_BLOCKS_on_GPU 4
+#define BYTES_PER_BLOCK  N_ANTENNAS*N_FREQUENCIES*N_TIMESTEPS_PER_CALL*N_AVERAGING*N_POL
 
 // Data Indexing, Offsets
 #define N_GPUS 8
@@ -20,8 +23,7 @@
 // Numerical Constants
 #define C_SPEED 299792458.0
 #define PI 3.14159265358979
-#define N_POL 2
-#define N_CX 2
+
 
 // Type Constants
 #define N_BITS 8
@@ -32,6 +34,15 @@
 typedef char2 CxInt8_t;
 
 
+__global__
+void reduce_input(char *input, CxInt8_t *output){
+
+
+
+
+}
+
+
 
 int main(){
 	std::cout << "hello" << std::endl;
@@ -39,7 +50,7 @@ int main(){
 	/* Variables */
 	CxInt8_t *d_A; 				// Weight matrix (N_BEAMS X N_ANTENNAS, for N_FREQUENCIES)
 	CxInt8_t *d_B; 				// Data Matrix (N_ANTENNAS X N_TIMESTEPS_PER_CALL, for N_FREQUENCIES)
-	CxInt8_t *d_data;			// Raw input data (Before data massaging)
+	char *d_data;			// Raw input data (Before data massaging)
 	cuComplex *d_C;				// Beamformed output (N_BEAMS X N_TIMESTEPS_PER_CALL, for N_FREQUENCIES)
 
 	int A_rows	 = N_BEAMS;
@@ -54,7 +65,7 @@ int main(){
 	float bw_per_channel = (END_F - START_F)/TOT_CHANNELS;
 
 	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
-	CxInt8_t *B = new CxInt8_t[B_cols*B_rows*N_FREQUENCIES];
+	char *data = new char[BYTES_PER_BLOCK]; //should be the size of one "dada block"
 	cuComplex *C = new cuComplex[C_cols*C_rows*N_FREQUENCIES];
 
 	float* pos = new float[N_ANTENNAS];		// Locations of antennas
@@ -84,14 +95,24 @@ int main(){
 	}
  	
 	int simulated_direction = 100;
+	int current_block = 0;
+	int tot_avging = N_POL*N_AVERAGING;
+
+	char high, low;
 
 	for (int i = 0; i < N_FREQUENCIES; i++){
 		float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/N_GPUS + i)*bw_per_channel;
 		float wavelength = C_SPEED/(1E9*freq);
 		for (int j = 0; j < N_TIMESTEPS_PER_CALL; j++){
 			for (int k = 0; k < N_ANTENNAS; k++){
-				B[i*B_stride + j*N_ANTENNAS + k].x = round(MAX_VAL*cos(2*PI*pos[k]*sin(dir[simulated_direction])/wavelength));
-				B[i*B_stride + j*N_ANTENNAS + k].y = round(MAX_VAL*sin(2*PI*pos[k]*sin(dir[simulated_direction])/wavelength));
+				for (int l = 0; l < tot_avging; l ++){
+
+					high = ((char) round(MAX_VAL*cos(2*PI*pos[k]*sin(dir[simulated_direction])/wavelength)));
+					low  = ((char) round(MAX_VAL*sin(2*PI*pos[k]*sin(dir[simulated_direction])/wavelength)));
+
+					data[i*B_stride*tot_avging + j*N_ANTENNAS*tot_avging + k*tot_avging + l] = (high << 4) | (0x0F & low);
+					// B[i*B_stride + j*N_ANTENNAS + k].y = ;
+				}
 			}
 		}
 	}
@@ -101,10 +122,10 @@ int main(){
 	cudaMalloc(&d_A, 	A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t));
 	cudaMalloc(&d_B, 	B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t));
 	cudaMalloc(&d_C, 	C_rows*C_cols*N_FREQUENCIES*sizeof(cuComplex));
-	cudaMalloc(&d_data, N_ANTENNAS*N_FREQUENCIES*N_TIMESTEPS_PER_CALL*N_BLOCKS_on_GPU*sizeof(CxInt8_t));
+	cudaMalloc(&d_data, BYTES_PER_BLOCK*N_BLOCKS_on_GPU);
 
 	cudaMemcpy(d_A, A, A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_B, B, B_cols*B_rows*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(&(d_data[BYTES_PER_BLOCK*current_block]), data, BYTES_PER_BLOCK, cudaMemcpyHostToDevice);
 
 
 
@@ -150,7 +171,7 @@ int main(){
 	cudaFree(d_data);
 
 	delete[] A;
-	delete[] B;
+	delete[] data;
 	delete[] C;
 	delete[] pos;
 	delete[] dir;

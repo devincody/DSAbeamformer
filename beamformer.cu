@@ -36,6 +36,10 @@ typedef char2 CxInt8_t;
 
 __global__
 void reduce_input(char *input, CxInt8_t *output){
+	__shared__ char shmem[4*32*3];
+
+	int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
 
 
 
@@ -127,7 +131,7 @@ int main(){
 	cudaMemcpy(d_A, A, A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
 	cudaMemcpy(&(d_data[BYTES_PER_BLOCK*current_block]), data, BYTES_PER_BLOCK, cudaMemcpyHostToDevice);
 
-
+	reduce_input<<<40, 32>>>(d_data, d_B);
 
 	cublasHandle_t handle;
 	cublasCreate(&handle);

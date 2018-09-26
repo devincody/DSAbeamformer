@@ -33,6 +33,11 @@
 
 typedef char2 CxInt8_t;
 
+union doubleType{
+	CxInt8_t ch;
+	int16_t in;
+}
+
 
 __global__
 void reduce_input(char *input, CxInt8_t *output){

@@ -1,17 +1,23 @@
 #include <iostream>
+#include <sstream>
+#include <iomanip>
+#include <string>
 #include <cublas_v2.h>
 #include <cmath>
+// #include <thrust::constant_iterator.h>
+#include <SFML/Graphics.hpp>
+#include "bitmap_image.hpp" // colorscheme
 
 // DSA CONSTANTS
 #define N_BEAMS 256
 #define N_ANTENNAS 64
 #define N_FREQUENCIES 256
 #define N_AVERAGING 16
-#define N_TIMESTEPS_PER_CALL 32
+#define N_TIMESTEPS_PER_CALL 1*N_AVERAGING*N_POL
 #define N_POL 2
 #define N_CX 2
 #define N_BLOCKS_on_GPU 4
-#define BYTES_PER_BLOCK  N_ANTENNAS*N_FREQUENCIES*N_TIMESTEPS_PER_CALL*N_AVERAGING*N_POL
+#define BYTES_PER_GEMM  N_ANTENNAS*N_FREQUENCIES*N_TIMESTEPS_PER_CALL
 
 // Data Indexing, Offsets
 #define N_GPUS 8
@@ -29,9 +35,14 @@
 #define N_BITS 8
 #define MAX_VAL 127
 
+#define SIG_BITS 4
+#define SIG_MAX_VAL 7
+
+
+// nvcc beamformer.cu -o beam -lcublas -lsfml-graphics
+
+
 #define DEG2RAD(x) ((x)*PI/180.0)
-
-
 
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 
@@ -68,6 +79,34 @@ typedef char2 CxInt8_t;
 typedef char char4_t[4]; //32-bit so global memory bandwidth usage is optimal
 typedef char char8_t[8]; //64-bit so global memory bandwidth usage is optimal
 typedef CxInt8_t cuChar4_t[4];
+
+
+
+__global__
+void detect_sum(cuComplex *input, float *output){
+	/*
+	Sum over N_TIMESTEPS_PER_CALL
+	number of threads = N_BEAMS = blockDim.x
+	number of blocks = N_FREQUENCIES
+	*/
+	__shared__ float shmem[N_BEAMS];
+
+	int input_idx = blockIdx.x * N_BEAMS * N_TIMESTEPS_PER_CALL + threadIdx.x;
+	int local_idx = threadIdx.x; // which beam
+	int output_idx = blockIdx.x*N_BEAMS + threadIdx.x;
+
+	cuComplex in;
+
+	// #pragma unroll
+	for (int i = 0; i < N_TIMESTEPS_PER_CALL; i++){
+		in = input[input_idx];
+		shmem[local_idx] += in.x*in.x;// + in.y*in.y;
+		input_idx += N_BEAMS; // go to the next time step
+	}
+
+	output[output_idx] = shmem[local_idx];
+}
+
 
 
 __global__
@@ -121,11 +160,13 @@ void expand_input(char *input, char *output, int input_size){
 int main(){
 	std::cout << "hello" << std::endl;
 
-	/* Variables */
-	CxInt8_t *d_A; 				// Weight matrix (N_BEAMS X N_ANTENNAS, for N_FREQUENCIES)
-	CxInt8_t *d_B; 				// Data Matrix (N_ANTENNAS X N_TIMESTEPS_PER_CALL, for N_FREQUENCIES)
-	char *d_data;			// Raw input data (Before data massaging)
-	cuComplex *d_C;				// Beamformed output (N_BEAMS X N_TIMESTEPS_PER_CALL, for N_FREQUENCIES)
+	int N_DIRS = 1024;
+	sf::Uint8 *img = new sf::Uint8[N_BEAMS*N_DIRS*4]; // image data
+	if (!img){ std::cerr << "img not allocated" << std::endl;}
+
+	sf::Image image;						 // SFML image object
+	std::ostringstream oss;
+	std::string title;
 
 	int A_rows	 = N_BEAMS;
 	int A_cols 	 = N_ANTENNAS;
@@ -136,12 +177,25 @@ int main(){
 	int C_rows	 = A_rows;
 	int C_cols	 = B_cols;
 	int C_stride = C_rows*C_cols;
-	float bw_per_channel = (END_F - START_F)/TOT_CHANNELS;
+	float bw_per_channel = (END_F - START_F)/TOT_CHANNELS; 
 
+	/* GPU Variables */
+	CxInt8_t *d_A; 				// Weight matrix (N_BEAMS X N_ANTENNAS, for N_FREQUENCIES)
+	CxInt8_t *d_B; 				// Data Matrix (N_ANTENNAS X N_TIMESTEPS_PER_CALL, for N_FREQUENCIES)
+	char *d_data;			// Raw input data (Before data massaging)
+	cuComplex *d_C;				// Beamformed output (N_BEAMS X N_TIMESTEPS_PER_CALL, for N_FREQUENCIES)
+	float *d_out;			// Data after being averaged over 16 time samples and 2 polarizations
+	float *d_dedispersed;	// Data after being de-dispersed
+	float *d_vec_ones;		// Vector of all ones for de-dispersion
+
+	/* HOST Variables */
 	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
 	CxInt8_t *B = new CxInt8_t[B_cols*B_rows*N_FREQUENCIES];
-	char *data = new char[BYTES_PER_BLOCK]; //should be the size of one "dada block", data is 4-bit so real/imag is packed into one 8-bit char
-	cuComplex *C = new cuComplex[C_cols*C_rows*N_FREQUENCIES];
+	char *data = new char[BYTES_PER_GEMM*N_BLOCKS_on_GPU]; //should be the size of one "dada block", data is 4-bit so real/imag is packed into one 8-bit char
+	float *out_dedispersed = new float[N_BEAMS];
+	float *vec_ones = new float[N_FREQUENCIES];
+
+	// thrust::constant_iterator<float> vec_o(1)
 
 	float* pos = new float[N_ANTENNAS];		// Locations of antennas
 	float* dir = new float[N_BEAMS];		// Direction of beams
@@ -153,8 +207,14 @@ int main(){
 		pos[i] = i*500.0/N_ANTENNAS - 250.0;
 	}
 
+	/* Directions for Beamforming */
 	for (int i = 0; i < N_BEAMS; i++){
 		dir[i] = i*DEG2RAD(7.0)/N_BEAMS - DEG2RAD(3.5);
+	}
+
+	/* Create vector of ones for Dedispersion */
+	for (int i = 0; i < N_FREQUENCIES; i++){
+		vec_ones[i] = 1.0;
 	}
 
 
@@ -172,27 +232,27 @@ int main(){
 	}
 
 	// Signal Matrix
-	int test_frequency = 10;
+	// int test_frequency = 10;
 	float test_direction = DEG2RAD(-3.4);
 
-	for (int i = 0; i < N_FREQUENCIES; i++){
-		float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/N_GPUS + i)*bw_per_channel;
-		float wavelength = C_SPEED/(1E9*freq);
+	// for (int i = 0; i < N_FREQUENCIES; i++){
+	// 	float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/N_GPUS + i)*bw_per_channel;
+	// 	float wavelength = C_SPEED/(1E9*freq);
 
-		for (int j = 0; j < N_TIMESTEPS_PER_CALL; j++){
-			for (int k = 0; k < N_ANTENNAS; k++){
-				if (i == test_frequency){
-					B[i*N_TIMESTEPS_PER_CALL*N_ANTENNAS + j*N_ANTENNAS + k].x = round(MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength));
-					B[i*N_TIMESTEPS_PER_CALL*N_ANTENNAS + j*N_ANTENNAS + k].y = round(MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength));
-				}
-			}
-		}
+	// 	for (int j = 0; j < N_TIMESTEPS_PER_CALL; j++){
+	// 		for (int k = 0; k < N_ANTENNAS; k++){
+	// 			if (i == test_frequency){
+	// 				B[i*N_TIMESTEPS_PER_CALL*N_ANTENNAS + j*N_ANTENNAS + k].x = round(MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength));
+	// 				B[i*N_TIMESTEPS_PER_CALL*N_ANTENNAS + j*N_ANTENNAS + k].y = round(MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength));
+	// 			}
+	// 		}
+	// 	}
 
-	}
+	// }
  	
-	int simulated_direction = 100;
+	// int simulated_direction = 100;
 	int current_block = 0;
-	int tot_avging = N_POL*N_AVERAGING;
+	// int tot_avging = N_POL*N_AVERAGING;
 
 	char high, low;
 
@@ -201,14 +261,11 @@ int main(){
 		float wavelength = C_SPEED/(1E9*freq);
 		for (int j = 0; j < N_TIMESTEPS_PER_CALL; j++){
 			for (int k = 0; k < N_ANTENNAS; k++){
-				for (int l = 0; l < tot_avging; l ++){
 
-					high = ((char) round(MAX_VAL*cos(2*PI*pos[k]*sin(dir[simulated_direction])/wavelength)));
-					low  = ((char) round(MAX_VAL*sin(2*PI*pos[k]*sin(dir[simulated_direction])/wavelength)));
+				high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength))); //real
+				low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength))); //imag
 
-					data[i*B_stride*tot_avging + j*N_ANTENNAS*tot_avging + k*tot_avging + l] = (high << 4) | (0x0F & low);
-					// B[i*B_stride + j*N_ANTENNAS + k].y = ;
-				}
+				data[i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 			}
 		}
 	}
@@ -218,23 +275,31 @@ int main(){
 	cudaMalloc(&d_A, 	A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t));
 	cudaMalloc(&d_B, 	B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t));
 	cudaMalloc(&d_C, 	C_rows*C_cols*N_FREQUENCIES*sizeof(cuComplex));
-	// cudaMalloc(&d_data, BYTES_PER_BLOCK*N_BLOCKS_on_GPU);
+	cudaMalloc(&d_data, BYTES_PER_GEMM*N_BLOCKS_on_GPU);
+	cudaMalloc(&d_out,  N_BEAMS*N_FREQUENCIES * sizeof(float));
+	cudaMalloc(&d_dedispersed, N_BEAMS*sizeof(float));
+	cudaMalloc(&d_vec_ones, N_BEAMS*sizeof(float));
 
 	cudaMemcpy(d_A, A, A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_B, B, B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
-	// cudaMemcpy(&(d_data[BYTES_PER_BLOCK*current_block]), data, BYTES_PER_BLOCK, cudaMemcpyHostToDevice);
+	cudaMemcpy(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice);
+	// cudaMemcpy(d_B, B, B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(&(d_data[BYTES_PER_GEMM*current_block]), data, BYTES_PER_GEMM, cudaMemcpyHostToDevice);
 
-	// reduce_input<<<40, 32>>>(d_data, d_B);
+	delete[] vec_ones;
+
+	expand_input<<<1000, 32>>>(d_data, (char *) d_B, B_stride*N_FREQUENCIES);
 
 	cublasHandle_t handle;
 	cublasCreate(&handle);
 
 	// Multiplicative Constants
-	cuComplex inv_max_value, zero;
+	cuComplex inv_max_value, zero, one;
 	inv_max_value.x = 1.0/MAX_VAL;
 	inv_max_value.y = 0;
 	zero.x = 0;
 	zero.y = 0;
+	one.x = 1;
+	one.y = 0;
 
 	cublasGemmStridedBatchedEx(handle, CUBLAS_OP_N, CUBLAS_OP_N,
 								A_rows, B_cols, A_cols,
@@ -246,30 +311,57 @@ int main(){
 								N_FREQUENCIES, CUDA_C_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
 
 
-	cudaMemcpy(C, d_C, C_rows*C_cols*N_FREQUENCIES*sizeof(cuComplex), cudaMemcpyDeviceToHost);
+	detect_sum<<<N_FREQUENCIES, N_BEAMS>>>(d_C, d_out);
 
-	float max = 0;
-	float rms = 0.0;
-	int max_i = 0;
-	for (int i = 0; i < 256; i++){
-		if (C[i].x>max){
-			rms += C[i].x*C[i].x;
-			max = C[i].x;
-			max_i = i;
+	float f_one = 1.0;
+	float f_zero = 0.0;
+
+
+	cublasSgemv(handle, CUBLAS_OP_N,
+				N_BEAMS, N_FREQUENCIES,
+				&f_one,
+				d_out, N_BEAMS,
+				d_vec_ones, 1,
+				&f_zero,
+				d_dedispersed, 1);
+
+
+	//gemv to dedisperse
+	//copy to host
+	//sfml image
+
+	cudaMemcpy(out_dedispersed, d_dedispersed, N_BEAMS*sizeof(float), cudaMemcpyDeviceToHost);
+
+	#if 0
+		float max = 0;
+		float rms = 0.0;
+		int max_i = 0;
+		for (int i = 0; i < 256; i++){
+			if (C[i].x>max){
+				rms += C[i].x*C[i].x;
+				max = C[i].x;
+				max_i = i;
+			}
+			std::cout << "C[" << i <<"] = " << C[i].x << "+" << C[i].y << "j" << std::endl;
 		}
-		std::cout << "C[" << i <<"] = " << C[i].x << "+" << C[i].y << "j" << std::endl;
-	}
 
-	std::cout << "max(C) = " << max_i << ", " << max << std::endl;
-	std::cout << "rms(c) = " << sqrt(rms/256.0) << std::endl;
+		std::cout << "max(C) = " << max_i << ", " << max << std::endl;
+		std::cout << "rms(c) = " << sqrt(rms/256.0) << std::endl;
+	#endif
+
+
 	cudaFree(d_A);
 	cudaFree(d_C);
 	cudaFree(d_B);
 	cudaFree(d_data);
+	cudaFree(d_out);
+	cudaFree(d_dedispersed);
+	cudaFree(d_vec_ones);
 
 	delete[] A;
+	delete[] out_dedispersed;
 	delete[] data;
-	delete[] C;
+	delete[] B;
 	delete[] pos;
 	delete[] dir;
 

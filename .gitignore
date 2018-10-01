@@ -7,3 +7,6 @@ Untitled.ipynb
 *.pptx
 *data
 *bit
+*.obj
+*.dll
+bitmap*

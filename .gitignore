@@ -3,10 +3,12 @@
 *.lib
 Untitled.ipynb
 *checkpoint*ipynb
-.ipynb_checkpoints*y
+*.ipynb_checkpoints*
 *.pptx
 *data
 *bit
 *.obj
 *.dll
 bitmap*
+*data.py*
+bin/data.py

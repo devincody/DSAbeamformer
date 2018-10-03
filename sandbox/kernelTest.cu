@@ -55,7 +55,7 @@ void detect_sum(cuComplex *input, cuComplex *output){
 
 	cuComplex in;
 
-	#pragma unroll
+	// #pragma unroll
 	for (int i = 0; i < N_POL*N_AVERAGING; i++){
 		in = input[tid];
 		shmem[tid] += in.x*in.x + in.y*in.y;

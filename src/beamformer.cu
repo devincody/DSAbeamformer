@@ -44,6 +44,16 @@ int main(){
 	float* dir = new float[N_BEAMS];		// Direction of beams
 	int gpu = 0;							// Unique identifier for each GPU
 
+	cuComplex h_inv_max_value, h_zero;//, one;
+	cuComplex *d_inv_max_value, *d_zero;
+	h_inv_max_value.x = 1.0/MAX_VAL;
+	h_inv_max_value.y = 0;
+	h_zero.x = 0;
+	h_zero.y = 0;
+	float h_f_one = 1.0;
+	float h_f_zero = 0.0;
+	float *d_f_one, *d_f_zero;
+
 
 	/* Populate location/direction Matricies */
 	for (int i = 0; i < N_ANTENNAS; i++){
@@ -76,25 +86,75 @@ int main(){
 
 	// Signal Matrix
 	// int test_frequency = 10;
-	cublasHandle_t handle;
-	cublasCreate(&handle);
+
 
 	/* Allocate and Move Memory to Device */
-	cudaMalloc(&d_A, 	A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t));
-	cudaMalloc(&d_B, 	B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t));
-	cudaMalloc(&d_C, 	C_rows*C_cols*N_FREQUENCIES*sizeof(cuComplex));
-	cudaMalloc(&d_data, BYTES_PER_GEMM*N_BLOCKS_on_GPU);
-	cudaMalloc(&d_out,  N_BEAMS*N_FREQUENCIES * sizeof(float));
-	cudaMalloc(&d_dedispersed, N_BEAMS*sizeof(float));
-	cudaMalloc(&d_vec_ones, N_BEAMS*sizeof(float));
+	gpuErrchk(cudaMalloc(&d_A, 	A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
+	gpuErrchk(cudaMalloc(&d_B, 	B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
+	gpuErrchk(cudaMalloc(&d_C, 	C_rows*C_cols*N_FREQUENCIES*sizeof(cuComplex)));
+	gpuErrchk(cudaMalloc(&d_data, BYTES_PER_GEMM*N_BLOCKS_on_GPU));
+	gpuErrchk(cudaMalloc(&d_out,  N_BEAMS*N_FREQUENCIES * sizeof(float)));
+	gpuErrchk(cudaMalloc(&d_dedispersed, N_BEAMS*sizeof(float)));
+	gpuErrchk(cudaMalloc(&d_vec_ones, N_BEAMS*sizeof(float)));
+
+	gpuErrchk(cudaMalloc(&d_inv_max_value, sizeof(cuComplex)));
+	gpuErrchk(cudaMalloc(&d_zero, sizeof(cuComplex)));
+	gpuErrchk(cudaMalloc(&d_f_one, sizeof(float)));
+	gpuErrchk(cudaMalloc(&d_f_zero, sizeof(float)));
 
 
-	cudaMemcpy(d_A, A, A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice);
+	gpuErrchk(cudaMemcpy(d_A, A, A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice));
+
+	gpuErrchk(cudaMemcpy(d_inv_max_value, &h_inv_max_value, sizeof(cuComplex), cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(d_zero, &h_zero, sizeof(cuComplex), cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(d_f_one, &h_f_one, sizeof(float), cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(d_f_zero, &h_f_zero, sizeof(float), cudaMemcpyHostToDevice));
+
+
+	cudaStream_t stream[N_STREAMS];
+	cublasHandle_t handle[N_STREAMS];
+
+	for (int i = 0; i < N_STREAMS; i++){
+		gpuErrchk(cudaStreamCreate(&(stream[i])));
+		gpuBLASchk(cublasCreate(&handle[i]));
+		gpuBLASchk(cublasSetPointerMode(handle[i], CUBLAS_POINTER_MODE_DEVICE));
+	}
+
+	int current_stream = 0;
+
+
+
+	float test_direction = DEG2RAD(-3.5) + 200*DEG2RAD(7.0)/(N_DIRS-1);
+	char high, low;
+
+	for (int i = 0; i < N_FREQUENCIES; i++){
+		float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*bw_per_channel;
+		// std::cout << "freq: " << freq << std::endl;
+		float wavelength = C_SPEED/(1E9*freq);
+		for (int j = 0; j < N_TIMESTEPS_PER_CALL; j++){
+			for (int k = 0; k < N_ANTENNAS; k++){
+
+				high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength))); //real
+				low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength))); //imag
+
+				data[i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
+			}
+		}
+	}
 
 
 	for (int iii = 0; iii < N_DIRS; iii++){
-		float test_direction = DEG2RAD(-3.5) + iii*DEG2RAD(7.0)/(N_DIRS-1);
+		if (iii %100 == 0){
+			std::cout << "Direction: " << iii << std::endl;
+		}
+
+		gpuBLASchk(cublasSetStream(handle[current_stream], stream[current_stream]));
+		// std::cout << "hello1" << std::endl;
+
+
+
+		
 
 		// for (int i = 0; i < N_FREQUENCIES; i++){
 		// 	float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*bw_per_channel;
@@ -115,85 +175,79 @@ int main(){
 		int current_block = 0;
 		// int tot_avging = N_POL*N_AVERAGING;
 
-		char high, low;
-
-		for (int i = 0; i < N_FREQUENCIES; i++){
-			float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*bw_per_channel;
-			// std::cout << "freq: " << freq << std::endl;
-			float wavelength = C_SPEED/(1E9*freq);
-			for (int j = 0; j < N_TIMESTEPS_PER_CALL; j++){
-				for (int k = 0; k < N_ANTENNAS; k++){
-
-					high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength))); //real
-					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength))); //imag
-
-					data[i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
-				}
-			}
-		}
 
 
+		// std::cout << "hello2" << std::endl;
 
 		// cudaMemcpy(d_B, B, B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
-		cudaMemcpy(&(d_data[BYTES_PER_GEMM*current_block]), data, BYTES_PER_GEMM, cudaMemcpyHostToDevice);
-
+		gpuErrchk(cudaMemcpyAsync(&(d_data[BYTES_PER_GEMM*current_block]), 
+									data, BYTES_PER_GEMM, 
+									cudaMemcpyHostToDevice,
+									stream[current_stream]));
+		// std::cout << "hello2a" << std::endl;
 		
-		expand_input<<<1000, 32>>>(d_data, (char *) d_B, B_stride*N_FREQUENCIES);
+		expand_input<<<1000, 32, 0, stream[current_stream]>>>(d_data, (char *) d_B, B_stride*N_FREQUENCIES);
 
+		// cuComplex inv_max_value, zero;//, one;
+		// inv_max_value.x = 1.0/MAX_VAL;
+		// inv_max_value.y = 0;
+		// zero.x = 0;
+		// zero.y = 0;
 
-
-		// Multiplicative Constants
-		cuComplex inv_max_value, zero;//, one;
-		inv_max_value.x = 1.0/MAX_VAL;
-		inv_max_value.y = 0;
-		zero.x = 0;
-		zero.y = 0;
-		// one.x = 1;
-		// one.y = 0;
-
-		cublasGemmStridedBatchedEx(handle, CUBLAS_OP_N, CUBLAS_OP_N,
+		// std::cout << "hello2b" << std::endl;
+		gpuBLASchk(cublasGemmStridedBatchedEx(handle[current_stream], CUBLAS_OP_N, CUBLAS_OP_N,
 									A_rows, B_cols, A_cols,
-									&inv_max_value,
+									d_inv_max_value,
 									d_A, CUDA_C_8I, A_rows, A_stride,
 									d_B, CUDA_C_8I, B_rows, B_stride,
-									&zero,
+									d_zero,
 									d_C, CUDA_C_32F, C_rows, C_stride,
-									N_FREQUENCIES, CUDA_C_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP);
+									N_FREQUENCIES, CUDA_C_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
 
+		// std::cout << "hello3" << std::endl;
+		detect_sum<<<N_FREQUENCIES, N_BEAMS, 0, stream[current_stream]>>>(d_C, d_out);
 
-		detect_sum<<<N_FREQUENCIES, N_BEAMS>>>(d_C, d_out);
-
-		float f_one = 1.0;
-		float f_zero = 0.0;
-
-
-		cublasSgemv(handle, CUBLAS_OP_N,
+		// std::cout << "hello4" << std::endl;
+		gpuBLASchk(cublasSgemv(handle[current_stream], CUBLAS_OP_N,
 					N_BEAMS, N_FREQUENCIES,
-					&f_one,
+					d_f_one,
 					d_out, N_BEAMS,
 					d_vec_ones, 1,
-					&f_zero,
-					d_dedispersed, 1);
+					d_f_zero,
+					d_dedispersed, 1));
 
 
 		//gemv to dedisperse
 		//copy to host
 		//sfml image
 
-		cudaMemcpy(out_dedispersed, d_dedispersed, N_BEAMS*sizeof(float), cudaMemcpyDeviceToHost);
+		gpuErrchk(cudaMemcpyAsync(out_dedispersed, 
+								  d_dedispersed, N_BEAMS*sizeof(float), 
+								  cudaMemcpyDeviceToHost,
+								  stream[current_stream]));
 
-		for (int i = 0; i < N_BEAMS; i++){
-			f << out_dedispersed[i];
-			if (i != N_BEAMS - 1){
-				f << ",";
+		#if DEBUG
+			for (int i = 0; i < N_BEAMS; i++){
+				f << out_dedispersed[i];
+				if (i != N_BEAMS - 1){
+					f << ",";
+				}
 			}
-		}
 
-		if (iii != N_DIRS-1){
-			f << "],\n[";
-		} else {
-			f<< "]]";
+			if (iii != N_DIRS-1){
+				f << "],\n[";
+			} else {
+				f<< "]]";
+			}
+		#endif
+
+
+		/* Increment Stream Counter */
+		current_stream++;
+		if (current_stream >= N_STREAMS){
+			current_stream = 0;
 		}
+		// std::cout << "cs : " << current_stream << std::endl;
 
 	}
 
@@ -214,17 +268,22 @@ int main(){
 		std::cout << "rms(c) = " << sqrt(rms/256.0) << std::endl;
 	#endif
 
+	// cuProfilerStop();
 
 	f.close();
 
+	for (int i = 0; i < N_STREAMS; i++){
+		gpuErrchk(cudaStreamDestroy(stream[i]));
+		gpuBLASchk(cublasDestroy(handle[i]));
+	}
 
-	cudaFree(d_A);
-	cudaFree(d_C);
-	cudaFree(d_B);
-	cudaFree(d_data);
-	cudaFree(d_out);
-	cudaFree(d_dedispersed);
-	cudaFree(d_vec_ones);
+	gpuErrchk(cudaFree(d_A));
+	gpuErrchk(cudaFree(d_C));
+	gpuErrchk(cudaFree(d_B));
+	gpuErrchk(cudaFree(d_data));
+	gpuErrchk(cudaFree(d_out));
+	gpuErrchk(cudaFree(d_dedispersed));
+	gpuErrchk(cudaFree(d_vec_ones));
 
 	delete[] vec_ones;
 	delete[] A;
@@ -234,6 +293,6 @@ int main(){
 	delete[] pos;
 	delete[] dir;
 
-	cublasDestroy(handle);
+	
 	return 0;
 }

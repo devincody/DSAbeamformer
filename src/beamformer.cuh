@@ -3,6 +3,8 @@
 #include <iomanip>
 #include <string>
 #include <cublas_v2.h>
+#include <cuda_runtime.h>
+
 #include <cmath>
 // #include <thrust::constant_iterator.h>
 #include <fstream>
@@ -39,6 +41,9 @@
 #define SIG_BITS 4
 #define SIG_MAX_VAL 7
 
+// Solving Constants
+#define N_STREAMS 10
+
 
 // nvcc beamformer.cu -o bin/beam -lcublas
 
@@ -56,6 +61,12 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 	}
 }
 
+
+void gpuBLASchk(int errval){
+	if (errval != CUBLAS_STATUS_SUCCESS){
+		std::cerr << "Failed BLAS call, error code " << errval << std::endl;
+	}
+}
 
 cudaEvent_t start;
 cudaEvent_t stop;
@@ -154,3 +165,5 @@ void expand_input(char *input, char *output, int input_size){
 		global_idx += gridDim.x * blockDim.x;
 	}
 }
+
+

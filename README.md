@@ -1,15 +1,19 @@
-# DSAbeamformer
+# DSA beamformer
 
-GPU implementation of a beamformer for the DSA project
+## What is the Deep Synoptic Array (DSA)?
+DSA is a 10-element radio interferometer located at the Owens Valley Radio Observatory (OVRO) in California. The purpose of this array is to detect and localize enignmatic pulses of radio energy known as fast radio bursts (FRBs). If you're interested in learning more about radio interferometers, check out my blog post about how they work [here](https://devincody.github.io/Blog/2018/02/27/An-Introduction-to-Radio-Interferometry-for-Engineers.html). 
 
-## How does the code work?
+## What does this code do?
+This is a collection of gpu-accelerated code which searches for FRBs in realtime using beamforming. When run on GTX 1080 Ti devices, the code will produce 1 set of (256) beams every 0.131 ms.
+
+## How does it work?
 
 ### Overview
 The code is split into 4 primary kernels:
 1. Data reordering
 2. 4-bit to 8-bit data expansion
 3. Beamforming
-4. Data Detection
+4. Detection
 
 ### Data reordering
 Data (int4 + int4) arrives from FPGA snap boards with the following data indexing:
@@ -76,12 +80,16 @@ We can next expand our data vector with multiple timesteps (middle image). While
 | computeType | CUDA_C_32F                      | Internal datatype                                     |
 | Algo        | CUBLAS_GEMM_DEFAULT_TENSOR_OP   | Use tensor operations                                 |
 
-### Memory Management
-Code keeps track of the number of blocks transfered to the GPU and the number of block analyzed at every moment and issues a transfer command any time the number of blocks analyzed is within 2 of the number of blocks transfered.
+
+### Detection
+The data coming out of the beamforming step is a complex number corresponding to the voltage of every beam. To make a meaning full detection, we need to take the power of each beam. The detection step, executed by the `detect_sum()` cuda kernel squares the real part of each beam and furthermore averages over 16 time samples to reduce the data rate.
 
 
+### Real-time operation
+To increase throughput of data, several streams are used to overlap memory transfers and computations. Furthermore, the code keeps track of the number of blocks transfered to the GPU and the number of block analyzed at every moment and issues a transfer command any time the number of blocks transfered is within two of the number of blocks analyzed. When the number of blocks transfered is equal to the number of block analyzed, the code will use a synchronous copy, however when there are more transfered blocks than analyzed blocks, the code will use an asynchronous copy on a non-computational stream.
 
 ## Similar Projects
+https://arxiv.org/abs/1412.4907
 http://journals.pan.pl/Content/87923/PDF/47.pdf
 https://www.researchgate.net/publication/220734131_Digital_beamforming_using_a_GPU
 https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=7622&context=etd

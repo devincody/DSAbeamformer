@@ -1,5 +1,8 @@
 # DSA beamformer
 
+![Crab Pulsar](https://github.com/devincody/DSAimager/blob/master/Images/pulse.gif)
+The Crab pulsar as imaged by DSA.
+
 ## What is the Deep Synoptic Array (DSA)?
 DSA is a 10-element radio interferometer located at the Owens Valley Radio Observatory (OVRO) in California. The purpose of this array is to detect and localize enignmatic pulses of radio energy known as fast radio bursts (FRBs). If you're interested in learning more about radio interferometers, check out my blog post about how they work [here](https://devincody.github.io/Blog/2018/02/27/An-Introduction-to-Radio-Interferometry-for-Engineers.html). 
 

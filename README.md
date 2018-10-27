@@ -88,6 +88,27 @@ The data coming out of the beamforming step is a complex number corresponding to
 ### Real-time operation
 To increase throughput of data, several streams are used to overlap memory transfers and computations. Furthermore, the code keeps track of the number of blocks transfered to the GPU and the number of block analyzed at every moment and issues a transfer command any time the number of blocks transfered is within two of the number of blocks analyzed. When the number of blocks transfered is equal to the number of block analyzed, the code will use a synchronous copy, however when there are more transfered blocks than analyzed blocks, the code will use an asynchronous copy on a non-computational stream.
 
+## Running the code
+Code can be run with the following command:
+```bash
+nvcc -o bin/beam src/beamformer.cu -lcublas
+```
+Debugging mode can be activated with:
+```bash
+nvcc -o bin/beam src/beamformer.cu -lcublas -DDEBUG
+```
+
+## Demonstration of Correctness
+This system was prototyped in python (see for example `Beamformer Theory.ipynb`). Program correctness is determined exclusively in relation to the python implementation. 
+
+![Percent Difference](https://github.com/devincody/DSAbeamformer/blob/streams/images/BeamformerValidation.png "GPU Correctness Validation")
+
+The left two graphs show beam power as a function of source direction (1024) and beam number (256) for the GPU implementation and python implementations respectively. The graph on the right shows percent difference between the two implementations on a scale from 0 to 1 percent.
+
+![Implementation Histograms](https://github.com/devincody/DSAbeamformer/blob/streams/images/BeamformerValidationHistograms.png "GPU Correctness Histograms")
+
+The above figure shows a histogram of beam powers for the two images in the previous plot. Note the log-log axes. The graph on the right shows a histogram of the percent errors between the two implementations. As shown, the error has an average value of 0.03% and is bounded by 0.8% across all pixels.
+
 ## Similar Projects
 https://arxiv.org/abs/1412.4907
 http://journals.pan.pl/Content/87923/PDF/47.pdf

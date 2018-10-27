@@ -50,24 +50,24 @@ typedef CxInt8_t cuChar4_t[4];
 By using reinterpret_cast() and the above data structures, we can convince cuda to read/write multiple 4-bit/8-bit numbers.
 
 ### Beamforming
-Beamforming is accomplished with a single `cublasGemmStridedBatchedEx()` call. To understand the indexing and striding of this function, we need to take a look at how the beamforming step is constructed. Consider first the monochromatic beamformer (top image). Here, the beam forming step is a simple matrix vector multiplication where the vector is data from each of the (64) antennas and the matrix is a fourier coefficient matrix whose weights are determined by the position of the antennas and direction of the beam steering. 
+Beamforming is accomplished with a single `cublasGemmStridedBatchedEx()` call. To understand the indexing and striding of this function, we need to take a look at how the beamforming step is constructed. Consider first the monochromatic beamformer (top). Here, the beam forming step is a simple matrix vector multiplication where the vector is data from each of the (64) antennas and the matrix is a fourier coefficient matrix whose weights are determined by the position of the antennas and direction of the beam steering. 
 
 ![beamforming steps](https://github.com/devincody/DSAbeamformer/blob/docs/images/Beamforming%20steps.png "Beamforming Steps")
 
-We can next expand our data vector with multiple timesteps (middle image). While not physically motivated, this will help improve the throughput of our GPU system (since we would otherwise have to do a matrix-vector multiplication for each time step). Lastly, we can tell CUBLAS to do multiple matrix-matrix multiplications at once to again increase throughput. This can be exploited to simultaneously do beamforming for all frequencies.
+We can next expand our data vector with multiple timesteps (middle). While not physically motivated, this will help improve the throughput of our GPU system (since we would otherwise have to do a matrix-vector multiplication for each time step). Lastly, we can tell CUBLAS to do multiple matrix-matrix multiplications at once to again increase throughput. This can be exploited to simultaneously do beamforming for all frequencies.
 
 `cublasGemmStridedBatchedEx()` takes 19 parameters which are defined below:
 
 | Parameter   | Value                           | Notes                                                 |
 |-------------|---------------------------------|-------------------------------------------------------|
-| Transa      | CUDA_OP_N                       | Matrix A is not transposed                            |
-| Transb      | CUDA_OP_N                       | Matrix B is not transposed                            |
-| M           | N_BEAMS                         | Number of Rows of A/C                                 |
-| N           | N_TIMESTEPS_PER_CALL            | Number of Columns of B/C                              |
-| K           | N_ANTENNAS                      | Number of Columns of A, Number of Rows in B           |
-| Alpha       | 1.0/127                         | Prefactor Scaling                                     |
-| Atype       | CUDA_C_8I                       | Data type of Fourier Matrix                           |
-| Lda         | N_BEAMS                         | Leading dimension of Fourier Matrix                   |
+| Transa      | CUDA_OP_N                       | Matrix A (Fourier coefficient matrix) is not transposed     |
+| Transb      | CUDA_OP_N                       | Matrix B (input data) is not transposed               |
+| M           | N_BEAMS                         | Number of rows of A/C                                 |
+| N           | N_TIMESTEPS_PER_CALL            | Number of columns of B/C                              |
+| K           | N_ANTENNAS                      | Number of columns of A, number of rows in B           |
+| Alpha       | 1.0/127                         | Fourier coefficients are 8-bit ints so must be normalized to 1 |
+| Atype       | CUDA_C_8I                       | Data type of Fourier coefficient matrix (i.e. 8-bit + 8-bit integers)                |
+| Lda         | N_BEAMS                         | Leading dimension of Fourier coefficient matrix                   |
 | strideA     | N_BEAMS*N_ANTENNAS              | Stride between different frequencies in A             |
 | Btype       | CUDA_C_8I                       | Data type of input data matrix                        |
 | Ldb         | N_ANTENNAS                      | Leading dimension of input matrix                     |

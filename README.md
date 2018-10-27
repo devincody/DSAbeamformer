@@ -1,6 +1,7 @@
 # DSA beamformer
 
 ![Crab Pulsar](https://github.com/devincody/DSAimager/blob/master/Images/pulse.gif)
+
 The Crab pulsar as imaged by DSA.
 
 ## What is the Deep Synoptic Array (DSA)?

@@ -14,7 +14,7 @@
 #include <cmath>
 // #include <thrust::constant_iterator.h>
 #include <fstream>
-#include "../lib/bitmap_image.hpp" // colorscheme
+// #include "../lib/bitmap_image.hpp" // colorscheme
 
 // DSA CONSTANTS
 #define N_BEAMS 256

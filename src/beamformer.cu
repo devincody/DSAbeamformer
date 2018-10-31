@@ -6,6 +6,19 @@ int main(){
 	std::cout << "Executing beamformer.cu" << std::endl;
 	print_all_defines();
 
+	char dev_name[] = "GeForce GTX 1080";
+	int devicesCount;
+	cudaGetDeviceCount(&devicesCount);
+	for(int deviceIndex = 0; deviceIndex < devicesCount; ++deviceIndex)
+	{
+	    cudaDeviceProp deviceProperties;
+	    cudaGetDeviceProperties(&deviceProperties, deviceIndex);
+	    if (dev_name[14] == deviceProperties.name[14]){
+		    std::cout <<  "Selected: " << deviceProperties.name << std::endl;
+		    std::cout << "letter: " << dev_name[14] << std::endl;
+		    gpuErrchk(cudaSetDevice(deviceIndex));
+		}
+	}
 
 
 	/* CUBLAS Dimensions */
@@ -49,9 +62,9 @@ int main(){
 	 *			HOST Variables		   *
 	 ***********************************/
 	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
-	char *data = new char[(long) N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS];
-	float *beam_out = new float[N_F_PER_DETECT*N_STREAMS];
-	gpuErrchk(cudaHostRegister(data, (long) N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
+	char *data = new char[(long) N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS]();
+	float *beam_out = new float[N_F_PER_DETECT*N_STREAMS]();
+	gpuErrchk(cudaHostRegister(data, ((long) N_BYTES_PRE_EXPANSION_PER_GEMM)*N_DIRS*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
 	gpuErrchk(cudaHostRegister(beam_out, N_FREQUENCIES*N_BEAMS*N_OUTPUTS_PER_GEMM*N_STREAMS*sizeof(float), cudaHostRegisterPortable)); //need pinned memory
 
 
@@ -65,9 +78,10 @@ int main(){
 
 		float *d_dedispersed;	// Data after being de-dispersed
 		float *d_vec_ones;		// Vector of all ones for de-dispersion
-		float *out_dedispersed = new float[N_BEAMS*N_STREAMS];
+		float *out_dedispersed = new float[N_BEAMS*N_DIRS]();
 		float *vec_ones = new float[N_FREQUENCIES];
-		gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_STREAMS*sizeof(float), cudaHostRegisterPortable));
+
+		gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_DIRS*sizeof(float), cudaHostRegisterPortable));
 
 	#endif
 
@@ -150,22 +164,33 @@ int main(){
 	/***********************************
 	 *		Concurrency Handles		   *
 	 ***********************************/
+
+	int priority_high, priority_low;
+	cudaDeviceGetStreamPriorityRange(&priority_low, &priority_high);
+
+	cudaStream_t HtoDstream;
 	cudaStream_t stream[N_STREAMS];
+
 	cublasHandle_t handle[N_STREAMS];
 	std::thread thread[N_STREAMS];
 	int timeSlice[N_STREAMS];
 	cudaEvent_t BlockSync[N_BLOCKS_on_GPU];
 
+	// gpuErrchk(cudaStreamCreateWithPriority(&HtoDstream, cudaStreamNonBlocking, priority_high));
+	gpuErrchk(cudaStreamCreate(&HtoDstream));
+
 	for (int i = 0; i < N_STREAMS; i++){
-		gpuErrchk(cudaStreamCreate(&(stream[i])));
+		// gpuErrchk(cudaStreamCreateWithPriority(&stream[i], cudaStreamNonBlocking, priority_high));
+		gpuErrchk(cudaStreamCreate(&stream[i]));
 		gpuBLASchk(cublasCreate(&handle[i]));
 		gpuBLASchk(cublasSetStream(handle[i], stream[i]));
 		gpuBLASchk(cublasSetPointerMode(handle[i], CUBLAS_POINTER_MODE_DEVICE));
 		timeSlice[i] = i;
 	}
+	
 
 	for (int i = 0; i < N_BLOCKS_on_GPU; i++){
-		cudaEventCreate(&BlockSync[i]);
+		gpuErrchk(cudaEventCreate(&BlockSync[i]));
 	}
 
 	/***********************************
@@ -173,7 +198,7 @@ int main(){
 	 ***********************************/
 
 
-	#if DEBUG
+	#if 0
 	float test_direction;
 	char high, low;
 	for (int iii = 0; iii < N_DIRS; iii++){
@@ -232,11 +257,14 @@ int main(){
 		// cudaMemcpy(d_B, B, B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
 
 		// The following IF statements are not mutually exclusive
+		#if VERBOSE
+		std::cout << "##########################################" << std::endl;
+		#endif 
 		if (blocks_analyzed == blocks_transfered){
 
-			std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU) << std::endl;
-			std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_DIRS) << std::endl;
-			std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
+			// std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU) << std::endl;
+			// std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_DIRS) << std::endl;
+			// std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
 
 			// wait for data to be ready
 			gpuErrchk(cudaMemcpy(&(d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU)]), 
@@ -244,48 +272,66 @@ int main(){
 										N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK, 
 										cudaMemcpyHostToDevice));
 
-
+			gpuErrchk(cudaEventRecord(BlockSync[blocks_transfered%N_BLOCKS_on_GPU], 0));
 
 			blocks_transfered++;
-
-			std::cout << "Analyzed == Transfered, Synchronous copy" << std::endl;
+			#if VERBOSE
+			std::cout << "Analyzed == Transfered, Synchronous copy\n";
 			std::cout << "Transfered: " << blocks_transfered << " Analyzed: " <<blocks_analyzed << std::endl;
+			#endif
 		}
 
-		if (blocks_analyzed == blocks_transfered-1){
+		if (blocks_analyzed == blocks_transfered-1 || blocks_analyzed == blocks_transfered-2){
 
-			std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU) << std::endl;
-			std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK)) << std::endl;
-			std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
+			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU) << std::endl;
+			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK)) << std::endl;
+			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
 
 			// do not wait for data to be ready
 			gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU)], 
 										&data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK))],
 										N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK, 
 										cudaMemcpyHostToDevice,
-										stream[0]));
+										HtoDstream));
 
-			// gpuErrchk(cudaEventRecord(BlockSync[blocks_transfered%N_BLOCKS_on_GPU], HtoD_stream));
+			gpuErrchk(cudaMemcpyAsync(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice, stream[0]));
+
+			// for (int s = 0; s < N_STREAMS; s++){
+			// 	gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU)], 
+			// 								&data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK))],
+			// 								N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK, 
+			// 								cudaMemcpyHostToDevice,
+			// 								stream[s]));
+			// }
+
+			// gpuErrchk(cudaEventCreate(&BlockSync[blocks_transfered%N_BLOCKS_on_GPU]));
+			gpuErrchk(cudaEventRecord(BlockSync[blocks_transfered%N_BLOCKS_on_GPU], HtoDstream));
 
 			blocks_transfered++;
-			std::cout << "Surplus of blocks, Asynchronous copy" << std::endl;
+			#if VERBOSE
+			std::cout << "Surplus of blocks, Asynchronous copy\n";
 			std::cout << "Transfered: " << blocks_transfered << " Analyzed: " <<blocks_analyzed << std::endl;
+			#endif
 
 		}
 		// std::cout << "hello2a" << std::endl;
 		
-		if (blocks_analyzed < blocks_transfered){
+		if (blocks_analyzed < blocks_transfered ){
+			#if VERBOSE
+			std::cout << "launching slavo. Analyzed = " << blocks_analyzed << " Transfered = " << blocks_transfered << " Start Dir = " << blocks_analyzed*N_GEMMS_PER_BLOCK + timeSlice[0] << "\n"; 
+			#endif
 
 			for (int st = 0; st < N_STREAMS; st++){
-				current_gemm = blocks_analyzed*N_GEMMS_PER_BLOCK + timeSlice[st];
+				gpuErrchk(cudaStreamWaitEvent(stream[st], BlockSync[(blocks_analyzed+1)%N_BLOCKS_on_GPU], 0));
+				gpuErrchk(cudaStreamSynchronize(stream[st]));
 
-				if (current_gemm % 100 == 0){
-					std::cout << "Direction: " << current_gemm << std::endl;
-				}
+
+
+				current_gemm = blocks_analyzed*N_GEMMS_PER_BLOCK + timeSlice[st];
 
 				//cudaStreamSynchronize(stream[st]);
 
-				expand_input<<<1000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*(blocks_analyzed%N_BLOCKS_on_GPU) + timeSlice[st])],
+				expand_input<<<10000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*(blocks_analyzed%N_BLOCKS_on_GPU) + timeSlice[st])],
 													      (char *) &d_B[N_CX_IN_PER_GEMM*st], 
 													      B_stride*N_FREQUENCIES);
 
@@ -309,77 +355,64 @@ int main(){
 
 
 				#if DEBUG
-					gpuErrchk(cudaStreamSynchronize(stream[st]));
+					// gpuErrchk(cudaStreamSynchronize(stream[st]));
 					// std::cout << "hello4" << std::endl;
-					std::cout << " test data: " << beam_out[st*N_F_PER_DETECT] << std::endl;
-					std::cout << " test data: " << beam_out[st*N_F_PER_DETECT+1] << std::endl;
-					std::cout << " test data: " << beam_out[st*N_F_PER_DETECT+2] << std::endl;
+					// std::cout << " test data: " << beam_out[st*N_F_PER_DETECT] << std::endl;
+					// std::cout << " test data: " << beam_out[st*N_F_PER_DETECT+1] << std::endl;
+					// std::cout << " test data: " << beam_out[st*N_F_PER_DETECT+2] << std::endl;
 
 					#if 0
-					for (int j = 0; j < N_BEAMS; j++){
-						float ans = 0;
-						for (int i = 0; i < N_FREQUENCIES; i ++){
-							ans += beam_out[st*N_F_PER_DETECT + i*N_BEAMS + j];
+						for (int j = 0; j < N_BEAMS; j++){
+							float ans = 0;
+							for (int i = 0; i < N_FREQUENCIES; i ++){
+								ans += beam_out[st*N_F_PER_DETECT + i*N_BEAMS + j];
+							}
+							// std::cout << "ans = " << ans << std::endl;
+							f << ans;
+							if (j != N_BEAMS - 1){
+								f << ",";
+							}
 						}
-						// std::cout << "ans = " << ans << std::endl;
-						f << ans;
-						if (j != N_BEAMS - 1){
-							f << ",";
-						}
-					}
 
-					if (current_gemm != N_DIRS-1){
-						f << "],\n[";
-					} else {
-						f<< "]]"<<std::endl;
-					}
+						if (current_gemm != N_DIRS-1){
+							f << "],\n[";
+						} else {
+							f<< "]]"<<std::endl;
+						}
 					#else
-					// std::cout << "First:" << std::endl;
-					// print_data_scalar<<<1, 1,0, stream[st]>>>(d_f_one);
-					// print_data_scalar<<<1, 1,0, stream[st]>>>(d_f_zero);
+						// std::cout << "First:" << std::endl;
+						// print_data_scalar<<<1, 1,0, stream[st]>>>(d_f_one);
+						// print_data_scalar<<<1, 1,0, stream[st]>>>(d_f_zero);
 
 
-					print_data<<<1, 10,0, stream[st]>>>(&d_out[st*N_F_PER_DETECT]);
-					gpuBLASchk(cublasSgemv(handle[st], CUBLAS_OP_N,
-								N_BEAMS, N_FREQUENCIES,
-								d_f_one,
-								&d_out[st*N_F_PER_DETECT], N_BEAMS,
-								d_vec_ones, 1,
-								d_f_zero,
-								&d_dedispersed[st*N_BEAMS], 1));
+						// print_data<<<1, 10,0, stream[st]>>>(&d_out[st*N_F_PER_DETECT]);
+						gpuBLASchk(cublasSgemv(handle[st], CUBLAS_OP_N,
+									N_BEAMS, N_FREQUENCIES,
+									d_f_one,
+									&d_out[st*N_F_PER_DETECT], N_BEAMS,
+									d_vec_ones, 1,
+									d_f_zero,
+									&d_dedispersed[st*N_BEAMS], 1));
 
-					// gpuErrchk(cudaStreamSynchronize(stream[st]));
-					std::cout << "Second:" << std::endl;
-					print_data<<<1, 10>>>(&d_dedispersed[st*N_BEAMS]);
-					gpuErrchk(cudaMemcpyAsync(&out_dedispersed[st*N_BEAMS], 
-											  &d_dedispersed[st*N_BEAMS], N_BEAMS*sizeof(float), 
-											  cudaMemcpyDeviceToHost,
-											  stream[st]));
+						// gpuErrchk(cudaStreamSynchronize(stream[st]));
+						// std::cout << "Second:" << std::endl;
+						// print_data<<<1, 10>>>(&d_dedispersed[st*N_BEAMS]);
+						gpuErrchk(cudaMemcpyAsync(&out_dedispersed[current_gemm*N_BEAMS], 
+												  &d_dedispersed[st*N_BEAMS], N_BEAMS*sizeof(float), 
+												  cudaMemcpyDeviceToHost,
+												  stream[st]));
 
-					std::cout << "Third:" << std::endl;
-					print_data<<<1, 10, 0, stream[st]>>>(&d_dedispersed[st*N_BEAMS]);
-					gpuErrchk(cudaStreamSynchronize(stream[st]));
+						// std::cout << "Third:" << std::endl;
+						// print_data<<<1, 10, 0, stream[st]>>>(&d_dedispersed[st*N_BEAMS]);
+						// gpuErrchk(cudaStreamSynchronize(stream[st]));
 
-					std::cout << "Fourth:" << std::endl;
-					print_data<<<1, 10, 0, stream[st]>>>(&d_dedispersed[st*N_BEAMS]);
+						// std::cout << "Fourth:" << std::endl;
+						// print_data<<<1, 10, 0, stream[st]>>>(&d_dedispersed[st*N_BEAMS]);
 
-					std::cout << "b test data: " << out_dedispersed[st*N_BEAMS] << std::endl;
-					std::cout << "b test data: " << out_dedispersed[st*N_BEAMS+1] << std::endl;
-					std::cout << "b test data: " << out_dedispersed[st*N_BEAMS+2] << std::endl;
+						// std::cout << "b test data: " << out_dedispersed[current_gemm*N_BEAMS] << std::endl;
+						// std::cout << "b test data: " << out_dedispersed[current_gemm*N_BEAMS+1] << std::endl;
+						// std::cout << "b test data: " << out_dedispersed[current_gemm*N_BEAMS+2] << std::endl;
 
-					for (int ii = 0; ii < N_BEAMS; ii++){
-						f << out_dedispersed[st*N_BEAMS + ii];
-						// std::cout << out_dedispersed[st*N_BEAMS + ii] << ", ";
-						if (ii != N_BEAMS - 1){
-							f << ",";
-						}
-					}
-
-					if (current_gemm != N_DIRS-1){
-						f << "],\n[";
-					} else {
-						f<< "]]"<<std::endl;
-					}
 					#endif
 
 					// gpuErrchk(cudaStreamAddCallback(stream[st], call_write_to_disk, &f, &file_mutex, current_gemm, BlockSync[st], &out_dedispersed[st*N_BEAMS], 0));
@@ -393,8 +426,11 @@ int main(){
 				// std::cout << "timeSlice["<< st << "] = " << timeSlice[st] << " and " << current_gemm << std::endl;
 				
 				if (timeSlice[st] == N_GEMMS_PER_BLOCK-1){
-					//This is incremented once each time slice in each block is analyzed
+					//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
 					blocks_analyzed++;
+					#if VERBOSE
+					std::cout<< "Done analyzing block. Analyzed = " << blocks_analyzed << " Transfered = " << blocks_transfered <<std::endl;
+					#endif
 				}
 				
 				timeSlice[st] += N_STREAMS; // increment so the next time slice is processed next
@@ -423,7 +459,24 @@ int main(){
 	}
 	std::cout << "Synchronized" << std::endl;
 
+
 	#if DEBUG
+		for (int jj = 0; jj < N_DIRS; jj++){
+			for (int ii = 0; ii < N_BEAMS; ii++){
+				f << out_dedispersed[jj*N_BEAMS + ii];
+				// std::cout << out_dedispersed[jj*N_BEAMS + ii] << ", ";
+				if (ii != N_BEAMS - 1){
+					f << ",";
+				}
+			}
+
+			if (jj != N_DIRS-1){
+				f << "],\n[";
+			} else {
+				f<< "]]"<<std::endl;
+			}
+		}
+
 		f.close();
 	#endif
 

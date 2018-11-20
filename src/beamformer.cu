@@ -77,13 +77,15 @@ int main(){
 		std::mutex file_mutex;
 
 		float *d_dedispersed;	// Data after being de-dispersed
-		float *d_vec_ones;		// Vector of all ones for de-dispersion
+		
 		float *out_dedispersed = new float[N_BEAMS*N_DIRS]();
-		float *vec_ones = new float[N_FREQUENCIES];
 
 		gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_DIRS*sizeof(float), cudaHostRegisterPortable));
 
 	#endif
+	float *d_vec_ones;		// Vector of all ones for de-dispersion
+	float *vec_ones = new float[N_FREQUENCIES];
+
 
 	/***********************************
 	 *		Beamforming Variables	   *
@@ -103,11 +105,9 @@ int main(){
 	}
 
 	/* Create vector of ones for Dedispersion */
-	#if DEBUG
-		for (int i = 0; i < N_FREQUENCIES; i++){
-			vec_ones[i] = 1.0;
-		}
-	#endif
+	for (int i = 0; i < N_FREQUENCIES; i++){
+		vec_ones[i] = 1.0;
+	}
 
 
 	/* Fourier Coefficient Matrix */
@@ -135,23 +135,24 @@ int main(){
 	/* Cublas Constant Memory */
 	gpuErrchk(cudaMalloc(&d_inv_max_value, sizeof(cuComplex)));
 	gpuErrchk(cudaMalloc(&d_zero, sizeof(cuComplex)));
+	gpuErrchk(cudaMalloc(&d_vec_ones, N_FREQUENCIES*sizeof(float)));
 
 
 	#if DEBUG
 		gpuErrchk(cudaMalloc(&d_f_one, sizeof(float)));
 		gpuErrchk(cudaMalloc(&d_f_zero, sizeof(float)));
 		gpuErrchk(cudaMalloc(&d_dedispersed, N_BEAMS*N_STREAMS*sizeof(float)));						// array for frequency averaged data
-		gpuErrchk(cudaMalloc(&d_vec_ones, N_FREQUENCIES*sizeof(float)));
+		
 	#endif
 
 	/* Copy constants to memory */
 	gpuErrchk(cudaMemcpy(d_A, A, A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice));
 	gpuErrchk(cudaMemcpy(d_inv_max_value, &h_inv_max_value, sizeof(cuComplex), cudaMemcpyHostToDevice));
 	gpuErrchk(cudaMemcpy(d_zero, &h_zero, sizeof(cuComplex), cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice));
 
 
 	#if DEBUG
-		gpuErrchk(cudaMemcpy(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice));
 		gpuErrchk(cudaMemcpy(d_f_one, &h_f_one, sizeof(float), cudaMemcpyHostToDevice));
 		gpuErrchk(cudaMemcpy(d_f_zero, &h_f_zero, sizeof(float), cudaMemcpyHostToDevice));
 		std::cout << "First: " << h_f_zero << " and " << h_f_one << std::endl;
@@ -185,6 +186,12 @@ int main(){
 		gpuBLASchk(cublasCreate(&handle[i]));
 		gpuBLASchk(cublasSetStream(handle[i], stream[i]));
 		gpuBLASchk(cublasSetPointerMode(handle[i], CUBLAS_POINTER_MODE_DEVICE));
+		cublasMath_t mode; 
+		gpuBLASchk(cublasGetMathMode(handle[i], &mode));
+		std::cout << "Mode[" << i << "] == " << mode << std::endl;
+		gpuBLASchk(cublasSetMathMode(handle[i], CUBLAS_TENSOR_OP_MATH ));
+		gpuBLASchk(cublasGetMathMode(handle[i], &mode));
+		std::cout << "Mode[" << i << "] == " << mode << std::endl;
 		timeSlice[i] = i;
 	}
 	
@@ -294,8 +301,6 @@ int main(){
 										cudaMemcpyHostToDevice,
 										HtoDstream));
 
-			gpuErrchk(cudaMemcpyAsync(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice, stream[0]));
-
 			// for (int s = 0; s < N_STREAMS; s++){
 			// 	gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU)], 
 			// 								&data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK))],
@@ -347,6 +352,8 @@ int main(){
 
 				// std::cout << "hello3" << std::endl;
 				detect_sum<<<detect_dimGrid, detect_dimBlock, 0, stream[st]>>>(&d_C[N_CX_OUT_PER_GEMM*st], N_INPUTS_PER_OUTPUT, &d_out[st*N_F_PER_DETECT]);
+
+
 
 				gpuErrchk(cudaMemcpyAsync(&beam_out[st*N_F_PER_DETECT], 
 										  &d_out[st*N_F_PER_DETECT], N_OUTPUTS_PER_GEMM*N_FREQUENCIES*N_BEAMS*sizeof(float), 
@@ -517,14 +524,13 @@ int main(){
 	delete[] pos;
 	delete[] dir;
 	delete[] beam_out;
+	delete[] vec_ones;
 	std::cout << "freed all1" << std::endl;
 
 
 	#if DEBUG
 		gpuErrchk(cudaHostUnregister(out_dedispersed));
 		std::cout << "freed all2" << std::endl;
-		delete[] vec_ones;
-		std::cout << "freed all3" << std::endl;
 		delete[] out_dedispersed;
 	#endif
 

@@ -7,8 +7,8 @@
 #include <stdio.h>
 
 // #include <pthread.h>
-#include <thread>
-#include <mutex>
+// #include <thread>
+// #include <mutex>
 // #include <barrier>
 
 #include <cmath>

@@ -16,10 +16,37 @@
 #include <fstream>
 #include "../lib/bitmap_image.hpp" // colorscheme
 
+
+
+
+/* dada includes */
+#include <algorithm>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <time.h>
+
+#include "dada_client.h"
+#include "dada_def.h"
+#include "dada_hdu.h"
+#include "multilog.h"
+#include "ipcio.h"
+#include "ipcbuf.h"
+#include "dada_affinity.h"
+#include "ascii_header.h"
+
+
+
+
 // DSA CONSTANTS
 #define N_BEAMS 256
 #define N_ANTENNAS 64
-#define N_FREQUENCIES 512
+#define N_FREQUENCIES 256
 #define N_AVERAGING 16
 #define N_POL 2
 #define N_CX 2				//Number of real numbers in a complex number, namely 2
@@ -39,7 +66,7 @@
 /* For each output, we need to average over 16 iterations and 2 polarizations*/
 #define N_INPUTS_PER_OUTPUT (N_POL*N_AVERAGING)
 
-/* This is the number of columns processed in each GEMM */
+/* This is the number of columns processed in each GEMM (includes 2 pol)*/
 #define N_TIMESTEPS_PER_GEMM (N_OUTPUTS_PER_GEMM*N_INPUTS_PER_OUTPUT)
 
 /* Calculates the number of blocks on the GPU given the number of GEMMMs possible on the GPU
@@ -60,7 +87,7 @@
 #define N_BYTES_POST_EXPANSION_PER_GEMM  (N_CX_IN_PER_GEMM*N_CX)
 
 /* Number of Bytes before expansion. Each complex number uses half a Byte */
-#define N_BYTES_PRE_EXPANSION_PER_GEMM  ((long) (N_CX_IN_PER_GEMM*N_CX/2))
+#define N_BYTES_PRE_EXPANSION_PER_GEMM  N_CX_IN_PER_GEMM*N_CX/2
 
 /* Number of Bytes (before expansion) for input array */
 #define N_BYTES_PER_BLOCK N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK
@@ -102,9 +129,6 @@ typedef char2 CxInt8_t;
 typedef char char4_t[4]; //four chars = 32-bit so global memory bandwidth usage is optimal
 typedef char char8_t[8]; //eight chars = 64-bit so global memory bandwidth usage is optimal
 typedef CxInt8_t cuChar4_t[4];
-
-
-
 
 
 /***********************************
@@ -149,6 +173,27 @@ cudaEvent_t stop;
 }
 
 
+/***********************************
+ *			DADA				   *
+ ***********************************/
+
+/* Usage as defined by dada example code */
+void usage()
+{
+  fprintf (stdout,
+	   "dsaX_imager [options]\n"
+	   " -c core   bind process to CPU core\n"
+	   " -k key [default dada]\n"
+	   " -h        print usage\n");
+}
+
+/*cleanup as defined by dada example code */
+void dsaX_dbgpu_cleanup (dada_hdu_t * in,  multilog_t * log) {
+	if (dada_hdu_unlock_read (in) < 0){
+		multilog(log, LOG_ERR, "could not unlock read on hdu_in\n");
+	}
+	dada_hdu_destroy (in);
+}
 
 
 /***********************************

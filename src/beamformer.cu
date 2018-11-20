@@ -3,6 +3,123 @@
 // nvcc src/beamformer.cu -o bin/beam -lcublas
 
 int main(){
+	
+	/* DADA defs */
+	dada_hdu_t* hdu_in = 0;
+	multilog_t* log = 0;
+	int core = -1;
+	int gpu = 1;
+	key_t in_key = 0x0000dada;
+	int observation_complete=0;
+	uint64_t header_size = 0;
+
+	/***************************************************
+	Parse Command Line Options
+	***************************************************/
+	int arg = 0;
+	while ((arg=getopt(argc,argv,"c:k:g:h")) != -1) {
+		switch (arg) {
+		// to bind to a cpu core
+			case 'c':
+				if (optarg){
+					core = atoi(optarg);
+					break;
+				} else {
+					printf ("ERROR: -c flag requires argument\n");
+					return EXIT_FAILURE;
+				}
+				// to set the dada key
+			case 'k':
+				if (sscanf (optarg, "%x", &in_key) != 1) {
+				fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
+				return EXIT_FAILURE;
+				}
+				break;
+			case 'g':
+				if (optarg){
+					gpu = atoi(optarg);
+					break;
+				} else {
+					printf ("ERROR: -g flag requires argument\n");
+					return EXIT_FAILURE;
+				}
+			case 'h':
+				usage();
+				return EXIT_SUCCESS;
+		}
+	}
+
+	/***************************************************
+	Initialize hdu
+	***************************************************/
+
+	// DADA stuff
+	log = multilog_open ("real", 0);
+	multilog_add (log, stderr);
+	multilog (log, LOG_INFO, "creating hdu\n");
+
+	// create dada hdu
+	hdu_in	= dada_hdu_create (log);
+	// set the input hdu key
+	dada_hdu_set_key (hdu_in, in_key);
+
+	// connect to dada buffer
+	if (dada_hdu_connect (hdu_in) < 0) {
+		printf ("could not connect to dada buffer\n");
+		return EXIT_FAILURE;
+	}
+
+	// lock read on buffer
+	if (dada_hdu_lock_read (hdu_in) < 0) {
+		printf ("could not lock to dada buffer\n");
+		return EXIT_FAILURE;
+	}
+
+	// Bind to cpu core
+	if (core >= 0)
+	{
+		printf("binding to core %d\n", core);
+		if (dada_bind_thread_to_core(core) < 0)
+		printf("failed to bind to core %d\n", core);
+	}
+
+	multilog (log, LOG_INFO, "Done setting up buffer\n");
+
+	/***************************************************
+	Deal with Headers
+	***************************************************/
+	// read the headers from the input HDU and mark as cleared
+	// will block until header is present in dada ring buffer
+	char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
+	if (!header_in)
+	{
+		multilog(log ,LOG_ERR, "main: could not read next header\n");
+		dsaX_dbgpu_cleanup (hdu_in, log);
+		return EXIT_FAILURE;
+	}
+
+	if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
+	{
+		multilog (log, LOG_ERR, "could not mark header block cleared\n");
+		dsaX_dbgpu_cleanup (hdu_in, log);
+		return EXIT_FAILURE;
+	}
+
+	// size of block in dada buffer
+	uint64_t block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
+	uint64_t bytes_read = 0, block_id;
+	char *block;
+
+	multilog (log, LOG_INFO, "Done setting up header \n");
+	
+	std::cout << "block size is: " << block_size << std::endl;
+
+
+
+	/***********************************
+	 *			GPU Variables		   *
+	 ***********************************/
+
 	std::cout << "Executing beamformer.cu" << std::endl;
 	print_all_defines();
 

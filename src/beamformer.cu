@@ -2,13 +2,13 @@
 
 // nvcc src/beamformer.cu -o bin/beam -lcublas
 
-int main(){
+int main(int argc, *argv[]){
 	
 	/* DADA defs */
 	dada_hdu_t* hdu_in = 0;
 	multilog_t* log = 0;
 	int core = -1;
-	int gpu = 1;
+	int gpu = 0;
 	key_t in_key = 0x0000dada;
 	int observation_complete=0;
 	uint64_t header_size = 0;
@@ -209,7 +209,6 @@ int main(){
 	 ***********************************/
 	float* pos = new float[N_ANTENNAS];		// Locations of antennas
 	float* dir = new float[N_BEAMS];		// Direction of bemformed beams
-	int gpu = 0;							// Unique identifier for each GPU
 
 	/* Populate location/direction Matricies */
 	for (int i = 0; i < N_ANTENNAS; i++){
@@ -290,7 +289,7 @@ int main(){
 	cudaStream_t stream[N_STREAMS];
 
 	cublasHandle_t handle[N_STREAMS];
-	std::thread thread[N_STREAMS];
+	// std::thread thread[N_STREAMS];
 	int timeSlice[N_STREAMS];
 	cudaEvent_t BlockSync[N_BLOCKS_on_GPU];
 
@@ -349,7 +348,7 @@ int main(){
 
 	std::cout << "done writing data" << std::endl;
 
-	int observation_complete = 0;
+	// int observation_complete = 0;
 	int64_t blocks_analyzed = 0;
 	int current_gemm = 0;
 	int64_t blocks_transfered = 0;

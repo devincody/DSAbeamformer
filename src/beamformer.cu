@@ -2,9 +2,17 @@
 
 // nvcc src/beamformer.cu -o bin/beam -lcublas
 
-int main(int argc, *argv[]){
+//sudo dada_db -k baab -d
+// sudo dada_db -k baab -n 8 -b 268435456 -l -p
+//bin/beam -k baab -c 0 -g 0
+
+
+int main(int argc, char *argv[]){
 	
-	/* DADA defs */
+
+	/***************************************************
+	DADA VARIABLES
+	***************************************************/
 	dada_hdu_t* hdu_in = 0;
 	multilog_t* log = 0;
 	int core = -1;
@@ -48,71 +56,6 @@ int main(int argc, *argv[]){
 				return EXIT_SUCCESS;
 		}
 	}
-
-	/***************************************************
-	Initialize hdu
-	***************************************************/
-
-	// DADA stuff
-	log = multilog_open ("real", 0);
-	multilog_add (log, stderr);
-	multilog (log, LOG_INFO, "creating hdu\n");
-
-	// create dada hdu
-	hdu_in	= dada_hdu_create (log);
-	// set the input hdu key
-	dada_hdu_set_key (hdu_in, in_key);
-
-	// connect to dada buffer
-	if (dada_hdu_connect (hdu_in) < 0) {
-		printf ("could not connect to dada buffer\n");
-		return EXIT_FAILURE;
-	}
-
-	// lock read on buffer
-	if (dada_hdu_lock_read (hdu_in) < 0) {
-		printf ("could not lock to dada buffer\n");
-		return EXIT_FAILURE;
-	}
-
-	// Bind to cpu core
-	if (core >= 0)
-	{
-		printf("binding to core %d\n", core);
-		if (dada_bind_thread_to_core(core) < 0)
-		printf("failed to bind to core %d\n", core);
-	}
-
-	multilog (log, LOG_INFO, "Done setting up buffer\n");
-
-	/***************************************************
-	Deal with Headers
-	***************************************************/
-	// read the headers from the input HDU and mark as cleared
-	// will block until header is present in dada ring buffer
-	char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
-	if (!header_in)
-	{
-		multilog(log ,LOG_ERR, "main: could not read next header\n");
-		dsaX_dbgpu_cleanup (hdu_in, log);
-		return EXIT_FAILURE;
-	}
-
-	if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
-	{
-		multilog (log, LOG_ERR, "could not mark header block cleared\n");
-		dsaX_dbgpu_cleanup (hdu_in, log);
-		return EXIT_FAILURE;
-	}
-
-	// size of block in dada buffer
-	uint64_t block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
-	uint64_t bytes_read = 0, block_id;
-	char *block;
-
-	multilog (log, LOG_INFO, "Done setting up header \n");
-	
-	std::cout << "block size is: " << block_size << std::endl;
 
 
 
@@ -179,9 +122,9 @@ int main(int argc, *argv[]){
 	 *			HOST Variables		   *
 	 ***********************************/
 	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
-	char *data = new char[(long) N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS]();
+	// char *data = new char[(long) N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS]();
 	float *beam_out = new float[N_F_PER_DETECT*N_STREAMS]();
-	gpuErrchk(cudaHostRegister(data, ((long) N_BYTES_PRE_EXPANSION_PER_GEMM)*N_DIRS*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
+	// gpuErrchk(cudaHostRegister(data, ((long) N_BYTES_PRE_EXPANSION_PER_GEMM)*N_DIRS*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
 	gpuErrchk(cudaHostRegister(beam_out, N_FREQUENCIES*N_BEAMS*N_OUTPUTS_PER_GEMM*N_STREAMS*sizeof(float), cudaHostRegisterPortable)); //need pinned memory
 
 
@@ -191,7 +134,7 @@ int main(int argc, *argv[]){
 		std::ofstream f;
 		f.open("bin/data.py");
 		f << "A = [[";
-		std::mutex file_mutex;
+		// std::mutex file_mutex;
 
 		float *d_dedispersed;	// Data after being de-dispersed
 		
@@ -291,7 +234,8 @@ int main(int argc, *argv[]){
 	cublasHandle_t handle[N_STREAMS];
 	// std::thread thread[N_STREAMS];
 	int timeSlice[N_STREAMS];
-	cudaEvent_t BlockSync[N_BLOCKS_on_GPU];
+	cudaEvent_t BlockTransferedSync[5*N_BLOCKS_on_GPU];
+	cudaEvent_t BlockAnalyzeddSync[5*N_BLOCKS_on_GPU];
 
 	// gpuErrchk(cudaStreamCreateWithPriority(&HtoDstream, cudaStreamNonBlocking, priority_high));
 	gpuErrchk(cudaStreamCreate(&HtoDstream));
@@ -302,18 +246,19 @@ int main(int argc, *argv[]){
 		gpuBLASchk(cublasCreate(&handle[i]));
 		gpuBLASchk(cublasSetStream(handle[i], stream[i]));
 		gpuBLASchk(cublasSetPointerMode(handle[i], CUBLAS_POINTER_MODE_DEVICE));
-		cublasMath_t mode; 
-		gpuBLASchk(cublasGetMathMode(handle[i], &mode));
-		std::cout << "Mode[" << i << "] == " << mode << std::endl;
+		// cublasMath_t mode; 
+		// gpuBLASchk(cublasGetMathMode(handle[i], &mode));
+		// std::cout << "Mode[" << i << "] == " << mode << std::endl;
 		gpuBLASchk(cublasSetMathMode(handle[i], CUBLAS_TENSOR_OP_MATH ));
-		gpuBLASchk(cublasGetMathMode(handle[i], &mode));
-		std::cout << "Mode[" << i << "] == " << mode << std::endl;
+		// gpuBLASchk(cublasGetMathMode(handle[i], &mode));
+		// std::cout << "Mode[" << i << "] == " << mode << std::endl;
 		timeSlice[i] = i;
 	}
 	
 
-	for (int i = 0; i < N_BLOCKS_on_GPU; i++){
-		gpuErrchk(cudaEventCreate(&BlockSync[i]));
+	for (int i = 0; i < 5*N_BLOCKS_on_GPU; i++){
+		gpuErrchk(cudaEventCreateWithFlags(&BlockTransferedSync[i], cudaEventDisableTiming));
+		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzeddSync[i], cudaEventDisableTiming));
 	}
 
 	/***********************************
@@ -321,192 +266,218 @@ int main(int argc, *argv[]){
 	 ***********************************/
 
 
-	#if 0
-	float test_direction;
-	char high, low;
-	for (int iii = 0; iii < N_DIRS; iii++){
-		test_direction = DEG2RAD(-3.5) + iii*DEG2RAD(7.0)/(N_DIRS-1);
-		for (int i = 0; i < N_FREQUENCIES; i++){
-			float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
-			// std::cout << "freq: " << freq << std::endl;
-			float wavelength = C_SPEED/(1E9*freq);
-			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
-				for (int k = 0; k < N_ANTENNAS; k++){
+	// #if 0
+	// 	float test_direction;
+	// 	char high, low;
+	// 	for (int iii = 0; iii < N_DIRS; iii++){
+	// 		test_direction = DEG2RAD(-3.5) + iii*DEG2RAD(7.0)/(N_DIRS-1);
+	// 		for (int i = 0; i < N_FREQUENCIES; i++){
+	// 			float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
+	// 			// std::cout << "freq: " << freq << std::endl;
+	// 			float wavelength = C_SPEED/(1E9*freq);
+	// 			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
+	// 				for (int k = 0; k < N_ANTENNAS; k++){
 
-					high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength))); //real
-					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength))); //imag
+	// 					high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength))); //real
+	// 					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength))); //imag
 
-					data[iii*N_BYTES_PRE_EXPANSION_PER_GEMM + i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
-				}
-			}
-		}
-	}
-	#else
-	memset(data, 0x70, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));
-	std::cout << "BOGUS DATA " << std::endl;
-	#endif
+	// 					data[iii*N_BYTES_PRE_EXPANSION_PER_GEMM + i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
+	// 				}
+	// 			}
+	// 		}
+	// 	}
+	// #else
+	// 	memset(data, 0x70, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));
+	// 	std::cout << "BOGUS DATA " << std::endl;
+	// #endif
 
-	std::cout << "done writing data" << std::endl;
+	// std::cout << "done writing data" << std::endl;
 
 	// int observation_complete = 0;
-	int64_t blocks_analyzed = 0;
-	int current_gemm = 0;
-	int64_t blocks_transfered = 0;
+	uint64_t blocks_analyzed = 0;
+	uint64_t blocks_transfered = 0;
+	uint64_t blocks_analysis_queue = 0;
+	uint64_t blocks_transfer_queue = 0;
+
+	#if DEBUG
+		int current_gemm = 0;
+	#endif
 
 
+
+	/***************************************************
+	Initialize hdu (FOR DADA)
+	***************************************************/
+
+	// DADA stuff
+	log = multilog_open ("real", 0);
+	multilog_add (log, stderr);
+	multilog (log, LOG_INFO, "creating hdu\n");
+
+	// create dada hdu
+	hdu_in	= dada_hdu_create (log);
+	// set the input hdu key
+	dada_hdu_set_key (hdu_in, in_key);
+
+	// connect to dada buffer
+	if (dada_hdu_connect (hdu_in) < 0) {
+		printf ("could not connect to dada buffer\n");
+		return EXIT_FAILURE;
+	}
+
+	// lock read on buffer
+	if (dada_hdu_lock_read (hdu_in) < 0) {
+		printf ("could not lock to dada buffer\n");
+		return EXIT_FAILURE;
+	}
+
+	// Bind to cpu core
+	if (core >= 0)
+	{
+		printf("binding to core %d\n", core);
+		if (dada_bind_thread_to_core(core) < 0)
+		printf("failed to bind to core %d\n", core);
+	}
+
+	multilog (log, LOG_INFO, "Done setting up buffer\n");
+
+	/***************************************************
+	Deal with Headers (FOR DADA)
+	***************************************************/
+	// read the headers from the input HDU and mark as cleared
+	// will block until header is present in dada ring buffer
+	char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
+	if (!header_in)
+	{
+		multilog(log ,LOG_ERR, "main: could not read next header\n");
+		dsaX_dbgpu_cleanup (hdu_in, log);
+		return EXIT_FAILURE;
+	}
+
+	if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
+	{
+		multilog (log, LOG_ERR, "could not mark header block cleared\n");
+		dsaX_dbgpu_cleanup (hdu_in, log);
+		return EXIT_FAILURE;
+	}
+
+	// size of block in dada buffer
+	uint64_t block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
+	uint64_t bytes_read = 0, block_id;
+	char *block;
+
+	multilog (log, LOG_INFO, "Done setting up header \n");
+	
+	std::cout << "block size is: " << block_size << std::endl;
+
+
+
+int transfer_separation = 2;
+int total_separation = 5;
+
+/*******************************************************************************************************************************
+									START OBSERVATION LOOP
+*******************************************************************************************************************************/
 	while (!observation_complete){
 		
-		// std::cout << "hello1" << std::endl;
-
-		// if (blocks_analyzed == blocks_transfered){
-		// 	gpuErrchk(cudaMemcpy(&(d_data[N_BYTES_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU)]),
-		// 						 &data[N_BYTES_PER_BLOCK*(blocks_transfered%N_DIRS)],
-		// 						 cudaMemcpyHostToDevice));
-		// } elseif(blocks_analyzed < blocks_transfered){
-		// 	for (int i = 0; i < N_GEMMS_PER_GPU; ++i){
-
-		// 	}
-		// 	blocks_analyzed ++;
-		// }
-
-	 	
-		// int simulated_direction = 100;
-		// int tot_avging = N_POL*N_AVERAGING;
-
-
-
-		// std::cout << "hello2" << std::endl;
-
-		// cudaMemcpy(d_B, B, B_rows*B_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice);
-
-		// The following IF statements are not mutually exclusive
 		#if VERBOSE
-		std::cout << "##########################################" << std::endl;
+			// std::cout << "##########################################" << std::endl;
 		#endif 
-		if (blocks_analyzed == blocks_transfered){
 
-			// std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU) << std::endl;
-			// std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_DIRS) << std::endl;
-			// std::cout << "sindex: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
 
-			// wait for data to be ready
-			gpuErrchk(cudaMemcpy(&(d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU)]), 
-										&(data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK))]),
-										N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK, 
-										cudaMemcpyHostToDevice));
 
-			gpuErrchk(cudaEventRecord(BlockSync[blocks_transfered%N_BLOCKS_on_GPU], 0));
-
-			blocks_transfered++;
-			#if VERBOSE
-			std::cout << "Analyzed == Transfered, Synchronous copy\n";
-			std::cout << "Transfered: " << blocks_transfered << " Analyzed: " <<blocks_analyzed << std::endl;
-			#endif
-		}
-
-		if (blocks_analyzed == blocks_transfered-1 || blocks_analyzed == blocks_transfered-2){
+		if ((blocks_transfer_queue - blocks_analyzed < total_separation) && (blocks_transfer_queue - blocks_transfered < transfer_separation)){
 
 			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU) << std::endl;
 			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK)) << std::endl;
 			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
+			#if VERBOSE
+				multilog(log, LOG_INFO, "A: Open new block for analysis\n");
+			#endif
 
-			// do not wait for data to be ready
-			gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU)], 
-										&data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK))],
+			block = ipcio_open_block_read(hdu_in->data_block,&bytes_read, &block_id);
+			std::cout << "Async, Bytes Read: " << bytes_read << ", Should also be 268435456" << std::endl;
+
+			if (bytes_read < block_size){
+				multilog(log, LOG_INFO, "Not enough bytes\n");
+				observation_complete = 1;
+				// cudaProfilerStop();
+				break;
+			}
+
+			gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
+										block,
 										N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK, 
 										cudaMemcpyHostToDevice,
 										HtoDstream));
 
-			// for (int s = 0; s < N_STREAMS; s++){
-			// 	gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%N_BLOCKS_on_GPU)], 
-			// 								&data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfered%(N_DIRS/N_GEMMS_PER_BLOCK))],
-			// 								N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK, 
-			// 								cudaMemcpyHostToDevice,
-			// 								stream[s]));
-			// }
+			// gpuErrchk(cudaEventCreate(&BlockTransferedSync[blocks_transfered%N_BLOCKS_on_GPU]));
+			// blocks_transfered++;
+			
+			gpuErrchk(cudaEventRecord(BlockTransferedSync[blocks_transfer_queue%(5*N_BLOCKS_on_GPU)], HtoDstream));
+			blocks_transfer_queue++;
+			ipcio_close_block_read (hdu_in->data_block, bytes_read);
 
-			// gpuErrchk(cudaEventCreate(&BlockSync[blocks_transfered%N_BLOCKS_on_GPU]));
-			gpuErrchk(cudaEventRecord(BlockSync[blocks_transfered%N_BLOCKS_on_GPU], HtoDstream));
-
-			blocks_transfered++;
-			#if VERBOSE
-			std::cout << "Surplus of blocks, Asynchronous copy\n";
-			std::cout << "Transfered: " << blocks_transfered << " Analyzed: " <<blocks_analyzed << std::endl;
-			#endif
-
+			// blocks_transfered++;
 		}
 		// std::cout << "hello2a" << std::endl;
+
+
+		for (uint64_t event = blocks_transfered; event < blocks_transfer_queue; event ++){
+			if(cudaEventQuery(BlockTransferedSync[event%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
+				blocks_transfered ++;
+				#if VERBOSE
+					std::cout << "async, Surplus of blocks, Asynchronous copy\n";
+					std::cout << "async, Transfered: " << blocks_transfered << " Analyzed: " <<blocks_analyzed << std::endl;
+					std::cout << "async, Transfered Q: " << blocks_transfer_queue << " Analyzed Q : " <<blocks_analysis_queue << std::endl;
+				#endif
+				gpuErrchk(cudaEventDestroy(BlockTransferedSync[event%(5*N_BLOCKS_on_GPU)]));
+				gpuErrchk(cudaEventCreateWithFlags(&BlockTransferedSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
+			} else {
+				break;
+			}
+		}
+
 		
-		if (blocks_analyzed < blocks_transfered ){
-			#if VERBOSE
-			std::cout << "launching slavo. Analyzed = " << blocks_analyzed << " Transfered = " << blocks_transfered << " Start Dir = " << blocks_analyzed*N_GEMMS_PER_BLOCK + timeSlice[0] << "\n"; 
-			#endif
+		if (blocks_analysis_queue < blocks_transfered){
+			for (int part = 0; part < N_GEMMS_PER_BLOCK/N_STREAMS; part++){
 
-			for (int st = 0; st < N_STREAMS; st++){
-				gpuErrchk(cudaStreamWaitEvent(stream[st], BlockSync[(blocks_analyzed+1)%N_BLOCKS_on_GPU], 0));
-				gpuErrchk(cudaStreamSynchronize(stream[st]));
+				#if VERBOSE
+				std::cout << "launching slavo. Analyzed = " << blocks_analyzed << " Transfered = " << blocks_transfered << " Start Dir = " << blocks_analysis_queue*N_GEMMS_PER_BLOCK + timeSlice[0] << std::endl; 
+				// std::cout << "Synchronizing on " << (blocks_analyzed+1)%N_BLOCKS_on_GPU << std::endl;
+				#endif
 
-
-
-				current_gemm = blocks_analyzed*N_GEMMS_PER_BLOCK + timeSlice[st];
-
-				//cudaStreamSynchronize(stream[st]);
-
-				expand_input<<<10000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*(blocks_analyzed%N_BLOCKS_on_GPU) + timeSlice[st])],
-													      (char *) &d_B[N_CX_IN_PER_GEMM*st], 
-													      B_stride*N_FREQUENCIES);
-
-				// std::cout << "hello2b" << std::endl;
-				gpuBLASchk(cublasGemmStridedBatchedEx(handle[st], CUBLAS_OP_N, CUBLAS_OP_N,
-											A_rows, B_cols, A_cols,
-											d_inv_max_value,
-											d_A, CUDA_C_8I, A_rows, A_stride,
-											&d_B[N_CX_IN_PER_GEMM*st], CUDA_C_8I, B_rows, B_stride,
-											d_zero,
-											&d_C[N_CX_OUT_PER_GEMM*st], CUDA_C_32F, C_rows, C_stride,
-											N_FREQUENCIES, CUDA_C_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
-
-				// std::cout << "hello3" << std::endl;
-				detect_sum<<<detect_dimGrid, detect_dimBlock, 0, stream[st]>>>(&d_C[N_CX_OUT_PER_GEMM*st], N_INPUTS_PER_OUTPUT, &d_out[st*N_F_PER_DETECT]);
-
-
-
-				gpuErrchk(cudaMemcpyAsync(&beam_out[st*N_F_PER_DETECT], 
-										  &d_out[st*N_F_PER_DETECT], N_OUTPUTS_PER_GEMM*N_FREQUENCIES*N_BEAMS*sizeof(float), 
-										  cudaMemcpyDeviceToHost,
-										  stream[st]));
-
-
-				#if DEBUG
+				for (int st = 0; st < N_STREAMS; st++){
+					// gpuErrchk(cudaStreamWaitEvent(stream[st], BlockTransferedSync[(blocks_analyzed+1)%N_BLOCKS_on_GPU], 0));
 					// gpuErrchk(cudaStreamSynchronize(stream[st]));
-					// std::cout << "hello4" << std::endl;
-					// std::cout << " test data: " << beam_out[st*N_F_PER_DETECT] << std::endl;
-					// std::cout << " test data: " << beam_out[st*N_F_PER_DETECT+1] << std::endl;
-					// std::cout << " test data: " << beam_out[st*N_F_PER_DETECT+2] << std::endl;
+					//cudaStreamSynchronize(stream[st]);
 
-					#if 0
-						for (int j = 0; j < N_BEAMS; j++){
-							float ans = 0;
-							for (int i = 0; i < N_FREQUENCIES; i ++){
-								ans += beam_out[st*N_F_PER_DETECT + i*N_BEAMS + j];
-							}
-							// std::cout << "ans = " << ans << std::endl;
-							f << ans;
-							if (j != N_BEAMS - 1){
-								f << ",";
-							}
-						}
+					expand_input<<<10000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*(blocks_analysis_queue%N_BLOCKS_on_GPU) + timeSlice[st])],
+														      (char *) &d_B[N_CX_IN_PER_GEMM*st], 
+														      B_stride*N_FREQUENCIES);
 
-						if (current_gemm != N_DIRS-1){
-							f << "],\n[";
-						} else {
-							f<< "]]"<<std::endl;
-						}
-					#else
-						// std::cout << "First:" << std::endl;
-						// print_data_scalar<<<1, 1,0, stream[st]>>>(d_f_one);
-						// print_data_scalar<<<1, 1,0, stream[st]>>>(d_f_zero);
+					// std::cout << "hello2b" << std::endl;
+					gpuBLASchk(cublasGemmStridedBatchedEx(handle[st], CUBLAS_OP_N, CUBLAS_OP_N,
+												A_rows, B_cols, A_cols,
+												d_inv_max_value,
+												d_A, CUDA_C_8I, A_rows, A_stride,
+												&d_B[N_CX_IN_PER_GEMM*st], CUDA_C_8I, B_rows, B_stride,
+												d_zero,
+												&d_C[N_CX_OUT_PER_GEMM*st], CUDA_C_32F, C_rows, C_stride,
+												N_FREQUENCIES, CUDA_C_32F, CUBLAS_GEMM_DEFAULT_TENSOR_OP));
 
+					// std::cout << "hello3" << std::endl;
+					detect_sum<<<detect_dimGrid, detect_dimBlock, 0, stream[st]>>>(&d_C[N_CX_OUT_PER_GEMM*st], N_INPUTS_PER_OUTPUT, &d_out[st*N_F_PER_DETECT]);
+
+					// print_data_scalar<<<1,1,0,stream[st]>>>(&d_out[st*N_F_PER_DETECT]);
+
+					gpuErrchk(cudaMemcpyAsync(&beam_out[st*N_F_PER_DETECT], 
+											  &d_out[st*N_F_PER_DETECT], N_OUTPUTS_PER_GEMM*N_FREQUENCIES*N_BEAMS*sizeof(float), 
+											  cudaMemcpyDeviceToHost,
+											  stream[st]));
+
+					#if DEBUG
+						current_gemm = blocks_analysis_queue*N_GEMMS_PER_BLOCK + timeSlice[st];
 
 						// print_data<<<1, 10,0, stream[st]>>>(&d_out[st*N_F_PER_DETECT]);
 						gpuBLASchk(cublasSgemv(handle[st], CUBLAS_OP_N,
@@ -525,54 +496,48 @@ int main(int argc, *argv[]){
 												  cudaMemcpyDeviceToHost,
 												  stream[st]));
 
-						// std::cout << "Third:" << std::endl;
-						// print_data<<<1, 10, 0, stream[st]>>>(&d_dedispersed[st*N_BEAMS]);
-						// gpuErrchk(cudaStreamSynchronize(stream[st]));
-
-						// std::cout << "Fourth:" << std::endl;
-						// print_data<<<1, 10, 0, stream[st]>>>(&d_dedispersed[st*N_BEAMS]);
-
-						// std::cout << "b test data: " << out_dedispersed[current_gemm*N_BEAMS] << std::endl;
-						// std::cout << "b test data: " << out_dedispersed[current_gemm*N_BEAMS+1] << std::endl;
-						// std::cout << "b test data: " << out_dedispersed[current_gemm*N_BEAMS+2] << std::endl;
-
 					#endif
 
-					// gpuErrchk(cudaStreamAddCallback(stream[st], call_write_to_disk, &f, &file_mutex, current_gemm, BlockSync[st], &out_dedispersed[st*N_BEAMS], 0));
+					// std::cout << "timeSlice["<< st << "] = " << timeSlice[st] << " and " << current_gemm << std::endl;
+					
+					timeSlice[st] += N_STREAMS; // increment so the next time slice is processed next
 
-					// gpuErrchk(cudaEventRecord(BlockSync[st], stream[st]));
+					if (timeSlice[st] >= N_GEMMS_PER_BLOCK){
+						timeSlice[st] -= N_GEMMS_PER_BLOCK; //wrap back to the beginning once each gemm in a block has been processed
+					}
 
-					// thread[st] = std::thread(call_write_to_disk, std::ref(f), std::ref(file_mutex), current_gemm, BlockSync[st], &out_dedispersed[st*N_BEAMS]);
-					// thread[st].detach();
+
+					// if (current_gemm == N_DIRS-1){
+					// 	observation_complete = 1;
+					// 	std::cout << "obs Complete" << std::endl;
+					// 	break;
+					// }
+				}
+			}
+			gpuErrchk(cudaEventRecord(BlockAnalyzeddSync[blocks_analysis_queue%(5*N_BLOCKS_on_GPU)], stream[N_STREAMS-1]));
+			blocks_analysis_queue ++;
+		}
+
+
+
+		// if (timeSlice[st] == N_GEMMS_PER_BLOCK-1){
+		for (uint64_t event = blocks_analyzed; event < blocks_analysis_queue; event ++){
+			if(cudaEventQuery(BlockAnalyzeddSync[blocks_analyzed%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
+				//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
+				blocks_analyzed++;
+				#if VERBOSE
+				std::cout<< "Done analyzing block. Analyzed = " << blocks_analyzed << " Transfered = " << blocks_transfered <<std::endl;
+				std::cout << "async, Transfered Q: " << blocks_transfer_queue << " Analyzed Q : " << blocks_analysis_queue << std::endl;
 				#endif
-
-				// std::cout << "timeSlice["<< st << "] = " << timeSlice[st] << " and " << current_gemm << std::endl;
-				
-				if (timeSlice[st] == N_GEMMS_PER_BLOCK-1){
-					//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
-					blocks_analyzed++;
-					#if VERBOSE
-					std::cout<< "Done analyzing block. Analyzed = " << blocks_analyzed << " Transfered = " << blocks_transfered <<std::endl;
-					#endif
-				}
-				
-				timeSlice[st] += N_STREAMS; // increment so the next time slice is processed next
-
-				if (timeSlice[st] >= N_GEMMS_PER_BLOCK){
-					timeSlice[st] -= N_GEMMS_PER_BLOCK; //wrap back to the beginning once each gemm in a block has been processed
-				}
-
-
-				if (current_gemm == N_DIRS-1){
-					observation_complete = 1;
-					std::cout << "obs Complete" << std::endl;
-					break;
-				}
+				gpuErrchk(cudaEventDestroy(BlockAnalyzeddSync[blocks_analyzed%(5*N_BLOCKS_on_GPU)]));
+				gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzeddSync[blocks_analyzed%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
+			} else {
+				break;
 			}
 		}
 
 		// std::cout << "cs : " << current_stream << std::endl;
-	}
+	} // end while (!observation_complete)
 
 
 	// cuProfilerStop();
@@ -581,6 +546,11 @@ int main(int argc, *argv[]){
 		gpuErrchk(cudaStreamSynchronize(stream[st]));
 	}
 	std::cout << "Synchronized" << std::endl;
+
+	for (int event = 0; event < 5*N_BLOCKS_on_GPU; event++){
+		gpuErrchk(cudaEventDestroy(BlockAnalyzeddSync[event]));
+		gpuErrchk(cudaEventDestroy(BlockTransferedSync[event]));
+	}
 
 
 	#if DEBUG
@@ -630,13 +600,13 @@ int main(int argc, *argv[]){
 
 	std::cout << "freeing host" << std::endl;
 
-	gpuErrchk(cudaHostUnregister(data));
+	// gpuErrchk(cudaHostUnregister(data));
 	gpuErrchk(cudaHostUnregister(beam_out));
 
 
 
 	delete[] A;
-	delete[] data;
+	// delete[] data;
 	delete[] pos;
 	delete[] dir;
 	delete[] beam_out;

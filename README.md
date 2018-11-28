@@ -86,7 +86,7 @@ We can next expand our data vector with multiple timesteps (middle). While not p
 
 
 ### Detection
-The data coming out of the beamforming step is a complex number corresponding to the voltage of every beam. To make a meaning full detection, we need to take the power of each beam. The detection step, executed by the `detect_sum()` cuda kernel squares the real part of each beam and furthermore averages over 16 time samples to reduce the data rate.
+The data coming out of the beamforming step is a complex number corresponding to the voltage of every beam. To make a meaning full detection, we need to take the power of each beam. The detection step, executed by the `detect_sum()` cuda kernel, squares and sums the real and imaginary parts of each beam. It furthermore averages over 16 time samples to reduce the data rate.
 
 
 ### Real-time operation

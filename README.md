@@ -93,7 +93,7 @@ The data coming out of the beamforming step is a complex number corresponding to
 
 At all times, the program maintains four numbers which describe the state of the beamformer. These numbers track the movement of blocks as they progress through the GPU. `blocks_transfer_queue` (TQ) keeps track of the total number of block transfer requests that have been issued, and `blocks_analysis_queue` (AQ) keeps track of the number of blocks that have been queued for analysis with the cudaRuntime. `blocks_transfered` (T) and `blocks_analyzed` (A) keep track of the total number of blocks that have been transfered to the GPU and analyzed respectively. 
 
-![RealtimeQueues](https://github.com/devincody/DSAbeamformer/blob/docs/images/RealtimeQueues.png "Realtime principle of operation")
+![RealtimeQueues](https://github.com/devincody/DSAbeamformer/blob/devincody-doc2/images/RealtimeQueues.PNG "Realtime principle of operation")
 
 It's perhaps easiest to visualize the relationship between these four numbers as pointers on the number line. In this representation, the numbers between A and AQ and the numbers between T and TQ form two queues, where A and T, are the fronts of the queues and AQ and TQ are the ends of the queues. Every time an `asyncCudaMemcpy()` is issued, TQ is moved down the line and every time a transfer is completed, T is shifted. Similarly, when the kernels for a block have been issued, AQ is moved down the line and when all the kernels for a block have completed, A is incremented. Because the transfers and kernel calls are issued asynchronously, we use cudaEvents to keep track of when they are completed.
 

@@ -90,7 +90,22 @@ The data coming out of the beamforming step is a complex number corresponding to
 
 
 ### Real-time operation
-To increase throughput of data, several streams are used to overlap memory transfers and computations. Furthermore, the code keeps track of the number of blocks transfered to the GPU and the number of block analyzed at every moment and issues a transfer command any time the number of blocks transfered is within two of the number of blocks analyzed. When the number of blocks transfered is equal to the number of block analyzed, the code will use a synchronous copy, however when there are more transfered blocks than analyzed blocks, the code will use an asynchronous copy on a non-computational stream.
+
+At all times, the program maintains four numbers which describe the state of the beamformer. These numbers track the movement of blocks as they progress through the GPU. `blocks_transfer_queue` (TQ) keeps track of the total number of block transfer requests that have been issued, and `blocks_analysis_queue` (AQ) keeps track of the number of blocks that have been queued for analysis with the cudaRuntime. `blocks_transfered` (T) and `blocks_analyzed` (A) keep track of the total number of blocks that have been transfered to the GPU and analyzed respectively. 
+
+![RealtimeQueues](https://github.com/devincody/DSAbeamformer/blob/docs/images/RealtimeQueues.png "Realtime principle of operation")
+
+It's perhaps easiest to visualize the relationship between these four numbers as pointers on the number line. In this representation, the numbers between A and AQ and the numbers between T and TQ form two queues, where A and T, are the fronts of the queues and AQ and TQ are the ends of the queues. Every time an `asyncCudaMemcpy()` is issued, TQ is moved down the line and every time a transfer is completed, T is shifted. Similarly, when the kernels for a block have been issued, AQ is moved down the line and when all the kernels for a block have completed, A is incremented. Because the transfers and kernel calls are issued asynchronously, we use cudaEvents to keep track of when they are completed.
+
+With this model in mind, we can start developing rules to determine what actions are taken based on the state of these four numbers. We can think of this as somewhat akin to a mealy finite state machine. Ultimately, there are four basic update rules for each of the numbers:
+
+1. Update TQ: Blocks should not be added to the transfer queue faster than blocks are analyzed or faster than blocks are being transfered. To implement this, we define two seperation metrics `total_separation` and `transfer_separation` which control how far apart A and TQ and similarly T and TQ can be apart respectively.
+
+2. Update AQ: Blocks should not be added to the analysis queue unless they've been transfered to the GPU that is to say: if and only if AQ < T, add blocks to the queue and increment AQ
+
+3. Update T: For every transfer request there is a corresponding cudaEvent. During our loop, we check all of the cudaEvents between T and TQ for completion and if we get a cudaSuccess, then we increment T.
+
+4. Update A: For every analysis request there is a corresponding cudaEvent. During our loop, we check all of the cudaEvents between A and AQ for completion and if we get a cudaSuccess, then we increment A.
 
 ## Running the code
 Code can be run with the following command:

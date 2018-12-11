@@ -135,9 +135,9 @@ dada_junkdb -c <cpu number> -z -k <buffer name> -r <buffer fill rate (MB/s)> -t 
 For example:
 ``` bash
 bin/beam -k baab -c 0 -g 0
-dada_junkdb -c 0 -z -k baab -r 4000 -t 10 ~/DSA/DSAbeamformer/lib/correlator_header_dsaX.txt
+dada_junkdb -c 0 -z -k baab -r 4000 -t 10 lib/correlator_header_dsaX.txt
 ```
-Here, the first line starts the script and the second starts filling the dada buffer.
+Here, the first line starts the script and the second starts filling the dada buffer. Note that we include a correlation header in the `lib` folder.
 
 ## Demonstration of Correctness
 This system was prototyped in python (see for example `Beamformer Theory.ipynb`). Program correctness is determined exclusively in relation to the python implementation. 

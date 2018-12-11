@@ -101,21 +101,43 @@ With this model in mind, we can start developing rules to determine what actions
 
 1. Update TQ: Blocks should not be added to the transfer queue faster than blocks are analyzed or faster than blocks are being transfered. To implement this, we define two seperation metrics `total_separation` and `transfer_separation` which control how far apart A and TQ and similarly T and TQ can be apart respectively.
 
-2. Update AQ: Blocks should not be added to the analysis queue unless they've been transfered to the GPU that is to say: if and only if AQ < T, add blocks to the queue and increment AQ
+2. Update AQ: Blocks should not be added to the analysis queue unless they've been transfered to the GPU that is to say: if and only if AQ < T, add blocks to the queue and increment AQ.
 
 3. Update T: For every transfer request there is a corresponding cudaEvent. During our loop, we check all of the cudaEvents between T and TQ for completion and if we get a cudaSuccess, then we increment T.
 
 4. Update A: For every analysis request there is a corresponding cudaEvent. During our loop, we check all of the cudaEvents between A and AQ for completion and if we get a cudaSuccess, then we increment A.
 
 ## Running the code
-Code can be run with the following command:
-```bash
-nvcc -o bin/beam src/beamformer.cu -lcublas
+
+A makefile is provided to facilitate compilation. There are two options which can be used: `make verbose` and `make debug` which optionally toggle print statements and debugging utilities respectively.
+
+Generally, the template for preparing the system for execution is:
+
+``` bash
+make #compile the code
+sudo dada_db -k <buffer name> -d # delete previous dada buffer
+sudo dada_db -k <buffer name> -n <number of blocks> -b <block size (bytes)> -l -p # create new dada buffer
 ```
-Debugging mode can be activated with:
-```bash
-nvcc -o bin/beam src/beamformer.cu -lcublas -DDEBUG
+As a concrete example:
+``` bash
+make #compile the code
+sudo dada_db -k baab -d # delete previous dada buffer
+sudo dada_db -k baab -n 8 -b 268435456 -l -p # create new dada buffer
 ```
+The above commands are included in a bash script in `util/exe.sh`.
+
+The following template starts the system:
+``` bash
+bin/beam -k <buffer name> -c <cpu number> -g <gpu number>
+dada_junkdb -c <cpu number> -z -k <buffer name> -r <buffer fill rate (MB/s)> -t <fill time (s)> <header>
+```
+
+For example:
+``` bash
+bin/beam -k baab -c 0 -g 0
+dada_junkdb -c 0 -z -k baab -r 4000 -t 10 ~/DSA/DSAbeamformer/lib/correlator_header_dsaX.txt
+```
+Here, the first line starts the script and the second starts filling the dada buffer.
 
 ## Demonstration of Correctness
 This system was prototyped in python (see for example `Beamformer Theory.ipynb`). Program correctness is determined exclusively in relation to the python implementation. 

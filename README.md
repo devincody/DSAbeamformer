@@ -94,11 +94,11 @@ We can next expand our data vector with multiple time steps (middle). While not 
 The data coming out of the beamforming step is a complex number corresponding to the voltage of every beam. To make a meaning full detection, we need to take the power of each beam. The detection step, executed by the `detect_sum()` cuda kernel, squares and sums the real and imaginary parts of each beam. It furthermore averages over 16 time samples to reduce the data rate.
 
 
-### Real-time operation
+## Real Time Theory of Operation
 
 Real-time operation is achieved by juggling the two most important GPU operations: transfering data onto the GPU and processing the data. This is done continuously and indefinitely with a `while(data_valid)` loop. At all times, the program maintains four numbers which describe the state of the beamformer. These numbers track the movement of blocks as they progress through the GPU. `blocks_transfer_queue` (TQ) keeps track of the total number of block transfer requests that have been queued for transfer onto the GPU, and `blocks_analysis_queue` (AQ) keeps track of the number of blocks that have been queued for analysis (transfer off the GPU is implicitly part of "analysis"). `blocks_transferred` (T) and `blocks_analyzed` (A) keep track of the total number of blocks that have been transferred to the GPU and analyzed respectively. 
 
-![RealtimeQueues](https://github.com/devincody/DSAbeamformer/blob/devincody-doc2/images/RealtimeQueues2.PNG "Realtime principle of operation")
+![RealtimeQueues](https://github.com/devincody/DSAbeamformer/blob/devincody-doc2/images/RealtimeQueues.PNG "Realtime principle of operation")
 
 It's perhaps easiest to visualize the relationship between these four numbers as pointers on the number line. In this representation, the numbers between A and AQ and the numbers between T and TQ form two queues. A and T, are the fronts of the queues and AQ and TQ are the ends of the queues. Every time an `asyncCudaMemcpy()` (i.e. a transfer request) is issued (requested), TQ is incremented by one. Every time a transfer is completed, T is incremented. Similarly, when all the kernels for a block have been issued, AQ is incremented; when all the kernels for a block have completed, A is incremented. Because the transfers and kernel calls are issued asynchronously, we use cudaEvents to keep track of when they are completed.
 

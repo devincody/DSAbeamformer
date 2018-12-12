@@ -19,7 +19,7 @@ The code is split into 4 primary kernels:
 3. Beamforming
 4. Detection
 
-### Data reordering
+### Data reordering (Not currently implemented)
 Data (int4 + int4) arrives from FPGA snap boards with the following data indexing:
 
 ~~Time   X  Frequency X Time_Batch X Time X Polarization X Antenna X Real/Imag~~
@@ -85,27 +85,29 @@ We can next expand our data vector with multiple timesteps (middle). While not p
 | Algo        | CUBLAS_GEMM_DEFAULT_TENSOR_OP   | Use tensor operations                                 |
 
 
-### Detection
+### Detection and Averaging
 The data coming out of the beamforming step is a complex number corresponding to the voltage of every beam. To make a meaning full detection, we need to take the power of each beam. The detection step, executed by the `detect_sum()` cuda kernel, squares and sums the real and imaginary parts of each beam. It furthermore averages over 16 time samples to reduce the data rate.
 
 
 ### Real-time operation
 
-At all times, the program maintains four numbers which describe the state of the beamformer. These numbers track the movement of blocks as they progress through the GPU. `blocks_transfer_queue` (TQ) keeps track of the total number of block transfer requests that have been issued, and `blocks_analysis_queue` (AQ) keeps track of the number of blocks that have been queued for analysis with the cudaRuntime. `blocks_transfered` (T) and `blocks_analyzed` (A) keep track of the total number of blocks that have been transfered to the GPU and analyzed respectively. 
+Real-time operation is achieved by juggling the two most important GPU operations: transering data onto the GPU and processing the data. This is done continuously and indefinitely with a `while(data_valid)` loop. At all times, the program maintains four numbers which describe the state of the beamformer. These numbers track the movement of blocks as they progress through the GPU. `blocks_transfer_queue` (TQ) keeps track of the total number of block transfer requests that have been queued for transfer onto the GPU, and `blocks_analysis_queue` (AQ) keeps track of the number of blocks that have been queued for analysis (transfer off the GPU is implicitly part of "analysis"). `blocks_transfered` (T) and `blocks_analyzed` (A) keep track of the total number of blocks that have been transfered to the GPU and analyzed respectively. 
 
 ![RealtimeQueues](https://github.com/devincody/DSAbeamformer/blob/devincody-doc2/images/RealtimeQueues.PNG "Realtime principle of operation")
 
-It's perhaps easiest to visualize the relationship between these four numbers as pointers on the number line. In this representation, the numbers between A and AQ and the numbers between T and TQ form two queues, where A and T, are the fronts of the queues and AQ and TQ are the ends of the queues. Every time an `asyncCudaMemcpy()` is issued, TQ is moved down the line and every time a transfer is completed, T is shifted. Similarly, when the kernels for a block have been issued, AQ is moved down the line and when all the kernels for a block have completed, A is incremented. Because the transfers and kernel calls are issued asynchronously, we use cudaEvents to keep track of when they are completed.
+It's perhaps easiest to visualize the relationship between these four numbers as pointers on the number line. In this representation, the numbers between A and AQ and the numbers between T and TQ form two queues. A and T, are the fronts of the queues and AQ and TQ are the ends of the queues. Every time an `asyncCudaMemcpy()` (i.e. a transfer request) is issued (requested), TQ is incremented by one. Every time a transfer is completed, T is incremented. Similarly, when all the kernels for a block have been issued, AQ is incremented; when all the kernels for a block have completed, A is incremented. Because the transfers and kernel calls are issued asynchronously, we use cudaEvents to keep track of when they are completed.
 
 With this model in mind, we can start developing rules to determine what actions are taken based on the state of these four numbers. We can think of this as somewhat akin to a mealy finite state machine. Ultimately, there are four basic update rules for each of the numbers:
 
 1. Update TQ: Blocks should not be added to the transfer queue faster than blocks are analyzed or faster than blocks are being transfered. To implement this, we define two seperation metrics `total_separation` and `transfer_separation` which control how far apart A and TQ and similarly T and TQ can be apart respectively.
 
-2. Update AQ: Blocks should not be added to the analysis queue unless they've been transfered to the GPU that is to say: if and only if AQ < T, add blocks to the queue and increment AQ.
+2. Update AQ: Blocks should not be added to the analysis queue unless they've been transfered to the GPU. That is to say: if and only if AQ < T, add blocks to the queue and increment AQ.
 
 3. Update T: For every transfer request there is a corresponding cudaEvent. During our loop, we check all of the cudaEvents between T and TQ for completion and if we get a cudaSuccess, then we increment T.
 
 4. Update A: For every analysis request there is a corresponding cudaEvent. During our loop, we check all of the cudaEvents between A and AQ for completion and if we get a cudaSuccess, then we increment A.
+
+Lastly, we also define a condition for ending the observation -- namely if there's no more valid data. This causes the program to leave the `while()` loop, free all the memory, and shut down.
 
 ## Running the code
 
@@ -150,8 +152,21 @@ The left two graphs show beam power as a function of source direction (1024) and
 
 The above figure shows a histogram of beam powers for the two images in the previous plot. Note the log-log axes. The graph on the right shows a histogram of the percent errors between the two implementations. As shown, the error has an average value of 0.03% and is bounded by 0.8% across all pixels.
 
+## Future Work
+Right now, the beamforming is done using a single cuBlas call, however, this may not be the most efficient way of doing things. Here are some alternate approaches and thoughts on their potential sucess. 
+
+1. Use Beanfarmer. Beanfarmer fuses the beamforming step with the detection step, effectively eliminating a costly trip to global memory. This, however, comes at the cost of increased complexity, reduced maintainability, and fewer opportunities for "free" upgrades with cuda library improvements (i.e. 4-bit arithmatic). 
+2. Use Cutlass to enable 4-bit GEMM. Can also fuse detection step to the GEMM with the Cutlass `epilogue` functionality, although this doesn't eliminate the global memory trip since it doesn't appear possible to do averaging with `epilogue`.
+3. Use Facebook's Tensor Comprehension Library to implement a fused beamforming, detection, and averaging kernel which can be automatically tuned for maximum speed. It's unclear though, if the library can operate on the tensorcores.
+4. Use openCL. Enables access to low(er) cost GPUs via AMD, but again the tensorcores may not be available and requires significant rewrite cost.
+
 ## Similar Projects
+https://github.com/ewanbarr/beanfarmer
+
 https://arxiv.org/abs/1412.4907
+
 http://journals.pan.pl/Content/87923/PDF/47.pdf
+
 https://www.researchgate.net/publication/220734131_Digital_beamforming_using_a_GPU
+
 https://scholarsarchive.byu.edu/cgi/viewcontent.cgi?article=7622&context=etd

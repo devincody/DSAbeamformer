@@ -2,13 +2,13 @@
 
 ![Crab Pulsar](https://github.com/devincody/DSAimager/blob/master/Images/pulse.gif)
 
-The Crab pulsar as imaged by DSA.
+The Crab pulsar as imaged by DSA10.
 
-## What is the Deep Synoptic Array (DSA)?
-DSA is a 10-element radio interferometer located at the Owens Valley Radio Observatory (OVRO) in California. The purpose of this array is to detect and localize enignmatic pulses of radio energy known as fast radio bursts (FRBs). If you're interested in learning more about radio interferometers, check out my blog post about how they work [here](https://devincody.github.io/Blog/2018/02/27/An-Introduction-to-Radio-Interferometry-for-Engineers.html). 
+## What is the Deep Synoptic Array (DSA100)?
+DSA is a 100-element radio interferometer located at the Owens Valley Radio Observatory (OVRO) in California. The purpose of this array is to detect and localize enignmatic pulses of radio energy known as fast radio bursts (FRBs). If you're interested in learning more about radio interferometers, check out my blog post about how they work [here](https://devincody.github.io/Blog/2018/02/27/An-Introduction-to-Radio-Interferometry-for-Engineers.html). 
 
 ## What does this code do?
-This is a collection of gpu-accelerated code which searches for FRBs in realtime using beamforming. When run on GTX 1080 Ti devices, the code will produce 1 set of (256) beams every 0.131 ms.
+This is a collection of gpu-accelerated code which searches for FRBs in realtime using beamforming. When run on GTX 1080 Ti devices, the code will produce 1 set of (256) beams every 0.26 ms.
 
 ## How does it work?
 
@@ -33,25 +33,27 @@ Time   X  Frequency X Time_Batch X Time X Polarization X Antenna X Real/Imag
 (cont.)      (256)	      (~3)      (16) 	     (2)	       (64) 	    (2)
 
 ### 4-bit to 8-bit data conversion
-The GPU recieves 4-bit data from the signal capture FPGAs. In order for the data to work with the CUBLAS tensor core, we need to convert this 4-bit data into 8-bit data. The following code accomplishes this:
+The GPU recieves 4-bit data from the signal capture FPGAs. In order for the data to work with the gpu tensor cores, we need to convert this 4-bit data into 8-bit data. The following code accomplishes this:
 
 ```c++
 char high = (temp >> 4); // roll the       most  significant 4 bits over the least significant 4 bits
 char low = (temp << 4);  // roll the       least significant 4 bits over the most  significant 4 bits
 low = (low >> 4);        // roll the *new* most  significant 4 bits over the least significant 4 bits
  ```
+ 
+Note that the last two steps will get "optimized" away by some compilers if combined into one line. Therefore it's important to keep them separate.
 
 #### A note about global memory access bandwidth
 To maximize the throughput of global memory accesses, it's best to use coalesced data accesses with 32-bit or larger data types. We can therefore maximize throughput by defining the following data structures:
 
 ```c++
-typedef char2 CxInt8_t;
-typedef char char4_t[4]; //32-bit so global memory bandwidth usage is optimal
-typedef char char8_t[8]; //64-bit so global memory bandwidth usage is optimal
-typedef CxInt8_t cuChar4_t[4];
+typedef char2 CxInt8_t;        // Define our complex type
+typedef char char4_t[4];       // 32-bit char array so global memory bandwidth usage is optimal
+typedef char char8_t[8];       // 64-bit char array so global memory bandwidth usage is optimal
+typedef CxInt8_t cuChar4_t[4]; // 64-bit array consisting of 4 complex numbers
 ```
 
-By using reinterpret_cast() and the above data structures, we can convince cuda to read/write multiple 4-bit/8-bit numbers.
+By using reinterpret_cast() and the above data structures, we can convince cuda to read/write multiple 4-bit/8-bit numbers in a coalesced manner. 
 
 ### Beamforming
 Beamforming is accomplished with a single `cublasGemmStridedBatchedEx()` call. To understand the indexing and striding of this function, we need to take a look at how the beamforming step is constructed. Consider first the monochromatic beamformer (top). Here, the beam forming step is a simple matrix vector multiplication where the vector is data from each of the (64) antennas and the matrix is a fourier coefficient matrix whose weights are determined by the position of the antennas and direction of the beam steering. 

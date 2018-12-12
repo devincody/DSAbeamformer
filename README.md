@@ -5,7 +5,7 @@
 The Crab pulsar as imaged by DSA10.
 
 ## What is the Deep Synoptic Array (DSA100)?
-DSA is a 100-element radio interferometer located at the Owens Valley Radio Observatory (OVRO) in California. The purpose of this array is to detect and localize enigmatic pulses of radio energy known as fast radio bursts (FRBs). If you're interested in learning more about radio interferometers, check out my blog post about how they work [here](https://devincody.github.io/Blog/2018/02/27/An-Introduction-to-Radio-Interferometry-for-Engineers.html). 
+DSA is a 100-element radio interferometer located at the Owens Valley Radio Observatory (OVRO) in California. The purpose of this array is to detect and localize enigmatic pulses of radio energy known as fast radio bursts (FRBs).
 
 ## What does this code do?
 This is a collection of gpu-accelerated code which searches for FRBs in real time using beamforming. When run on GTX 1080 Ti devices, the code will produce 1 set of (256) beams every ~0.26 ms.

@@ -14,3 +14,4 @@ bitmap*
 bin/data.py
 bin/
 foo.txt
+*.pdb

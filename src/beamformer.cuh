@@ -54,7 +54,7 @@
 
 #if DEBUG
 	#define N_AVERAGING 4
-#elif
+#else
 	#define N_AVERAGING 16
 #endif
 

@@ -1,9 +1,16 @@
+#executables
 *.exe
 *.exp
 *.lib
+m2g
+py
+
+#python notebook
 Untitled.ipynb
 *checkpoint*ipynb
 *.ipynb_checkpoints*
+
+#other objects
 *.pptx
 *data
 *bit
@@ -12,6 +19,5 @@ Untitled.ipynb
 bitmap*
 *data.py*
 bin/data.py
-bin/
 foo.txt
 *.pdb

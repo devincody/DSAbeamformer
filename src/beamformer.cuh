@@ -53,7 +53,7 @@
 #define N_CX 2				//Number of real numbers in a complex number, namely 2
 
 #if DEBUG
-	#define N_AVERAGING 1
+	#define N_AVERAGING 4
 #elif
 	#define N_AVERAGING 16
 #endif

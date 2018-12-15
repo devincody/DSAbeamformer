@@ -405,9 +405,9 @@ int total_separation = 5;
 
 		if ((blocks_transfer_queue - blocks_analyzed < total_separation) && (blocks_transfer_queue - blocks_transferred < transfer_separation)){
 
-			std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU) << std::endl;
-			std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue) << std::endl;
-			std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
+			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU) << std::endl;
+			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue) << std::endl;
+			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
 
 
 			#if DEBUG
@@ -456,7 +456,6 @@ int total_separation = 5;
 			
 			
 		}
-		std::cout << "hello2a" << std::endl;
 
 
 		for (uint64_t event = blocks_transferred; event < blocks_transfer_queue; event ++){

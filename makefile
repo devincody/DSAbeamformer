@@ -8,10 +8,11 @@ SRCDIR = src
 all: CXXFLAGS += -lpsrdada
 all: beam
 
-debug: CXXFLAGS += -D DEBUG=1 -g -lineinfo
-debug: beam
+debug: CXXFLAGS += -DDEBUG=1 -g -lineinfo
 
 verbose: CXXFLAGS += -DVERBOSE
+
+debug: beam
 verbose: beam
 
 beam: $(SRCDIR)/beamformer.cu

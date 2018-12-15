@@ -521,6 +521,7 @@ int total_separation = 5;
 
 					#if DEBUG
 						current_gemm = blocks_analysis_queue*N_GEMMS_PER_BLOCK + timeSlice[st];
+						std::cout << "CG: " << current_gemm << std::endl;
 
 						// Sum over all 256 frequencies with a matrix-vector multiplication.
 						gpuBLASchk(cublasSgemv(handle[st], CUBLAS_OP_N,

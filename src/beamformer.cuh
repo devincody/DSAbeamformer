@@ -49,7 +49,7 @@
 #define N_ANTENNAS 64
 #define N_FREQUENCIES 256
 
-#define N_POL 2
+#define N_POL 2				//Number of polarizations
 #define N_CX 2				//Number of real numbers in a complex number, namely 2
 
 #if DEBUG

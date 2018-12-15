@@ -1,7 +1,5 @@
 #include "beamformer.cuh"
 
-#define VERBOSE 1
-
 // nvcc src/beamformer.cu -o bin/beam -lcublas
 
 //sudo dada_db -k baab -d
@@ -72,16 +70,16 @@ int main(int argc, char *argv[]){
 	std::cout << "Executing beamformer.cu" << std::endl;
 	print_all_defines();
 
-	char dev_name[] = "GeForce GTX 1060";
+	char prefered_dev_name[] = "GeForce GTX 1080";
 	int devicesCount;
 	cudaGetDeviceCount(&devicesCount);
 	for(int deviceIndex = 0; deviceIndex < devicesCount; ++deviceIndex)
 	{
 	    cudaDeviceProp deviceProperties;
 	    cudaGetDeviceProperties(&deviceProperties, deviceIndex);
-	    if (dev_name[14] == deviceProperties.name[14]){
+	    if (prefered_dev_name[14] == deviceProperties.name[14]){
 		    std::cout <<  "Selected: " << deviceProperties.name << std::endl;
-		    std::cout << "letter: " << dev_name[14] << std::endl;
+		    std::cout << "letter: " << prefered_dev_name[14] << std::endl;
 		    gpuErrchk(cudaSetDevice(deviceIndex));
 		}
 	}

@@ -1,5 +1,5 @@
 CC=nvcc
-CXXFLAGS= -std=c++11 -O3
+CXXFLAGS= -O3
 NVFLAGS=-lcublas -Wno-deprecated-gpu-targets -use_fast_math -arch=sm_61 -restrict
 
 BINDIR = bin

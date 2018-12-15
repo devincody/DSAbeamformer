@@ -197,7 +197,7 @@ int main(int argc, char *argv[]){
 	gpuErrchk(cudaMalloc(&d_A, 	A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_B, 	N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_C, 	N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
-	gpuErrchk(cudaMalloc(&d_data, N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
+	gpuErrchk(cudaMalloc(&d_data, N_BYTES_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
 	gpuErrchk(cudaMalloc(&d_out, N_F_PER_DETECT*N_STREAMS * sizeof(float)));			// array for detected, averaged data
 
 	/* Cublas Constant Memory */
@@ -405,9 +405,9 @@ int total_separation = 5;
 
 		if ((blocks_transfer_queue - blocks_analyzed < total_separation) && (blocks_transfer_queue - blocks_transferred < transfer_separation)){
 
-			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU) << std::endl;
-			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue) << std::endl;
-			// std::cout << "index: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK << std::endl;
+			// std::cout << "index: " << N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU) << std::endl;
+			// std::cout << "index: " << N_BYTES_PER_BLOCK*(blocks_transfer_queue) << std::endl;
+			// std::cout << "index: " << N_BYTES_PER_BLOCK << std::endl;
 
 
 			#if DEBUG
@@ -416,9 +416,9 @@ int total_separation = 5;
 						// multilog(log, LOG_INFO, "A: Open new block for analysis\n");
 						std::cout << "DEBUG: Async copy" << std::endl;
 					#endif
-					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
-												&data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*blocks_transfer_queue],
-												N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK, 
+					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
+												&data[N_BYTES_PER_BLOCK*blocks_transfer_queue],
+												N_BYTES_PER_BLOCK, 
 												cudaMemcpyHostToDevice,
 												HtoDstream));
 					std::cout << "DEBUG: transfer scheduled" << std::endl;
@@ -428,11 +428,12 @@ int total_separation = 5;
 				}
 			#else
 				block = ipcio_open_block_read(hdu_in->data_block,&bytes_read, &block_id);
+				if (bytes_read != N_BYTES_PER_BLOCK){
+					std::cout << "ERROR: Async, Bytes Read: " << bytes_read << ", Should also be "<< N_BYTES_PER_BLOCK << std::endl;
+				}
 
-				#if VERBOSE
-					// multilog(log, LOG_INFO, "A: Open new block for analysis\n");
-					std::cout << "Async, Bytes Read: " << bytes_read << ", Should also be 268435456" << std::endl;
-				#endif
+
+
 
 				if (bytes_read < block_size){
 					// multilog(log, LOG_INFO, "Not enough bytes\n");
@@ -441,9 +442,9 @@ int total_separation = 5;
 					break;
 				}
 
-				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
+				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
 											block,
-											N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK, 
+											N_BYTES_PER_BLOCK, 
 											cudaMemcpyHostToDevice,
 											HtoDstream));
 

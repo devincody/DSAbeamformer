@@ -4,6 +4,8 @@
 *.lib
 m2g
 py
+bin
+beam
 
 #python notebook
 Untitled.ipynb
@@ -21,3 +23,4 @@ bitmap*
 bin/data.py
 foo.txt
 *.pdb
+*.swp

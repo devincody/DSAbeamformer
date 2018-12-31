@@ -8,7 +8,7 @@ SRCDIR = src
 all: CXXFLAGS += -lpsrdada
 all: beam
 
-debug: CXXFLAGS += -DDEBUG=1 -g -lineinfo
+debug: CXXFLAGS += -DDEBUG=1 -g -lineinfo -DVERBOSE
 
 verbose: CXXFLAGS += -DVERBOSE
 

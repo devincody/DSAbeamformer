@@ -396,18 +396,21 @@ int main(int argc, char *argv[]){
 int transfer_separation = 2;
 int total_separation = 5;
 
-/*******************************************************************************************************************************
-									START OBSERVATION LOOP
-*******************************************************************************************************************************/
+/*********************************************************************************
+						START OBSERVATION LOOP
+*********************************************************************************/
 	while (!observation_complete){
 		
 		#if VERBOSE
+			// Header to be printed during every loop
 			std::cout << "##########################################" << std::endl;
 			std::cout << "A: " << blocks_analyzed <<  ", AQ: " << blocks_analysis_queue << ", T: " << blocks_transferred << ", TQ: " << blocks_transfer_queue << std::endl;
 		#endif 
 
 
-
+		/**************************************************
+						Copy Data to GPU
+		**************************************************/
 		if ((blocks_transfer_queue - blocks_analyzed < total_separation) && (blocks_transfer_queue - blocks_transferred < transfer_separation)){
 
 			// std::cout << "index: " << N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU) << std::endl;
@@ -416,10 +419,13 @@ int total_separation = 5;
 
 
 			#if DEBUG
+				/***********************************
+				IF debugging, copy from "data" array
+				***********************************/
 				if (blocks_transfer_queue < N_DIRS/N_GEMMS_PER_BLOCK){
 					#if VERBOSE 
 						// multilog(log, LOG_INFO, "A: Open new block for analysis\n");
-						std::cout << "DEBUG: Async copy" << std::endl;
+						std::cout << "VERBOSE: Async copy" << std::endl;
 					#endif
 					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
 												&data[N_BYTES_PER_BLOCK*blocks_transfer_queue],
@@ -431,6 +437,10 @@ int total_separation = 5;
 					blocks_transfer_queue++;
 				}
 			#else
+				/***********************************
+					Else copy from PSRDADA block
+				***********************************/
+
 				block = ipcio_open_block_read(hdu_in->data_block,&bytes_read, &block_id);
 
 				if (bytes_read != N_BYTES_PER_BLOCK){
@@ -454,21 +464,17 @@ int total_separation = 5;
 				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_on_GPU)], HtoDstream));
 				blocks_transfer_queue++;
 			#endif
-
-
-			
-			
 		}
 
-
+		/**************************************************
+				Check if data has been transfered
+		**************************************************/
 		for (uint64_t event = blocks_transferred; event < blocks_transfer_queue; event ++){
 			if(cudaEventQuery(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
 				blocks_transferred ++;
 
 				#if VERBOSE
-					std::cout << "async, Surplus of blocks, Asynchronous copy\n";
-					std::cout << "async, Transferred: " << blocks_transferred << " Analyzed: " <<blocks_analyzed << std::endl;
-					std::cout << "async, Transferred Q: " << blocks_transfer_queue << " Analyzed Q : " <<blocks_analysis_queue << std::endl;
+					std::cout << "Block transfered to GPU" << std::endl;
 				#endif
 
 				gpuErrchk(cudaEventDestroy(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]));
@@ -478,12 +484,14 @@ int total_separation = 5;
 			}
 		}
 
-		
+		/**************************************************
+					Initiate Beamforming
+		**************************************************/
 		if (blocks_analysis_queue < blocks_transferred){
 			for (int part = 0; part < N_GEMMS_PER_BLOCK/N_STREAMS; part++){
 
 				#if VERBOSE
-					std::cout << "Queueing slavo. Analyzed = " << blocks_analyzed << " Transferred = " << blocks_transferred << " Start Dir = " << blocks_analysis_queue*N_GEMMS_PER_BLOCK + timeSlice[0] << std::endl; 
+					std::cout << "Queueing Beamforming. Analyzed = " << blocks_analyzed << " Transferred = " << blocks_transferred << " Start Dir = " << blocks_analysis_queue*N_GEMMS_PER_BLOCK + timeSlice[0] << std::endl; 
 				#endif
 
 				for (int st = 0; st < N_STREAMS; st++){
@@ -521,7 +529,7 @@ int total_separation = 5;
 
 					#if DEBUG
 						current_gemm = blocks_analysis_queue*N_GEMMS_PER_BLOCK + timeSlice[st];
-						std::cout << "CG: " << current_gemm << std::endl;
+						std::cout << "Current GEMM: " << current_gemm << std::endl;
 
 						// Sum over all 256 frequencies with a matrix-vector multiplication.
 						gpuBLASchk(cublasSgemv(handle[st], CUBLAS_OP_N,
@@ -537,7 +545,6 @@ int total_separation = 5;
 												  &d_dedispersed[st*N_BEAMS], N_BEAMS*sizeof(float), 
 												  cudaMemcpyDeviceToHost,
 												  stream[st]));
-
 					#endif
 
 					
@@ -554,7 +561,9 @@ int total_separation = 5;
 		}
 
 
-		/* Check to see which blocks have been successfully analyzed */
+		/**************************************************
+				Check if beamforming has completed
+		**************************************************/
 		for (uint64_t event = blocks_analyzed; event < blocks_analysis_queue; event ++){
 			if(cudaEventQuery(BlockAnalyzeddSync[blocks_analyzed%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
 				//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)

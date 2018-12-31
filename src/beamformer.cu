@@ -247,7 +247,7 @@ int main(int argc, char *argv[]){
 	// std::thread thread[N_STREAMS];
 	int timeSlice[N_STREAMS];
 	cudaEvent_t BlockTransferredSync[5*N_BLOCKS_on_GPU];
-	cudaEvent_t BlockAnalyzeddSync[5*N_BLOCKS_on_GPU];
+	cudaEvent_t BlockAnalyzedSync[5*N_BLOCKS_on_GPU];
 
 	// gpuErrchk(cudaStreamCreateWithPriority(&HtoDstream, cudaStreamNonBlocking, priority_high));
 	gpuErrchk(cudaStreamCreate(&HtoDstream));
@@ -270,7 +270,7 @@ int main(int argc, char *argv[]){
 
 	for (int i = 0; i < 5*N_BLOCKS_on_GPU; i++){
 		gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[i], cudaEventDisableTiming));
-		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzeddSync[i], cudaEventDisableTiming));
+		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[i], cudaEventDisableTiming));
 	}
 
 	/***********************************
@@ -562,7 +562,7 @@ int total_separation = 4;
 
 				}
 			}
-			gpuErrchk(cudaEventRecord(BlockAnalyzeddSync[blocks_analysis_queue%(5*N_BLOCKS_on_GPU)], stream[N_STREAMS-1]));
+			gpuErrchk(cudaEventRecord(BlockAnalyzedSync[blocks_analysis_queue%(5*N_BLOCKS_on_GPU)], stream[N_STREAMS-1]));
 			blocks_analysis_queue ++;
 		}
 
@@ -571,15 +571,15 @@ int total_separation = 4;
 				Check if beamforming has completed
 		**************************************************/
 		for (uint64_t event = blocks_analyzed; event < blocks_analysis_queue; event ++){
-			if(cudaEventQuery(BlockAnalyzeddSync[blocks_analyzed%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
+			if(cudaEventQuery(BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
 				//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
 				blocks_analyzed++;
 				#if VERBOSE
 					std::cout<< "Done analyzing block. Analyzed = " << blocks_analyzed << " Transferred = " << blocks_transferred <<std::endl;
 					std::cout << "async, Transferred Q: " << blocks_transfer_queue << " Analyzed Q : " << blocks_analysis_queue << std::endl;
 				#endif
-				gpuErrchk(cudaEventDestroy(BlockAnalyzeddSync[blocks_analyzed%(5*N_BLOCKS_on_GPU)]));
-				gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzeddSync[blocks_analyzed%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
+				gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)]));
+				gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
 				#if DEBUG
 					if ((current_gemm == N_DIRS-1) && (blocks_analyzed == blocks_transfer_queue)){
 						observation_complete = 1;
@@ -604,7 +604,7 @@ int total_separation = 4;
 	std::cout << "Synchronized" << std::endl;
 
 	for (int event = 0; event < 5*N_BLOCKS_on_GPU; event++){
-		gpuErrchk(cudaEventDestroy(BlockAnalyzeddSync[event]));
+		gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event]));
 		gpuErrchk(cudaEventDestroy(BlockTransferredSync[event]));
 	}
 

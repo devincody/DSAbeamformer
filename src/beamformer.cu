@@ -394,7 +394,7 @@ int main(int argc, char *argv[]){
 
 
 int transfer_separation = 2;
-int total_separation = 5;
+int total_separation = 4;
 
 /*********************************************************************************
 						START OBSERVATION LOOP
@@ -424,7 +424,6 @@ int total_separation = 5;
 				***********************************/
 				if (blocks_transfer_queue < N_DIRS/N_GEMMS_PER_BLOCK){
 					#if VERBOSE 
-						// multilog(log, LOG_INFO, "A: Open new block for analysis\n");
 						std::cout << "VERBOSE: Async copy" << std::endl;
 					#endif
 					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
@@ -474,12 +473,15 @@ int total_separation = 5;
 				blocks_transferred ++;
 
 				#if VERBOSE
-					std::cout << "Block transfered to GPU" << std::endl;
+					std::cout << "Block " << event << " transfered to GPU" << std::endl;
 				#endif
 
 				gpuErrchk(cudaEventDestroy(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]));
 				gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
 			} else {
+				#if VERBOSE
+					std::cout << "No more blocks" << std::endl;
+				#endif
 				break; // dont need to check later blocks if current block has not finished
 			}
 		}
@@ -487,7 +489,11 @@ int total_separation = 5;
 		/**************************************************
 					Initiate Beamforming
 		**************************************************/
+		#if VERBOSE
+			std::cout << "Immediately after: No more blocks" << std::endl;
+		#endif
 		if (blocks_analysis_queue < blocks_transferred){
+
 			for (int part = 0; part < N_GEMMS_PER_BLOCK/N_STREAMS; part++){
 
 				#if VERBOSE
@@ -583,6 +589,9 @@ int total_separation = 5;
 				#endif
 				
 			} else {
+				#if VERBOSE
+					std::cout << "Analysis event: " << event << " has not completed" << std::endl;
+				#endif
 				break; // If previous analyzed blocks have not been finished, there's no reason to check the next blocks
 			}
 		}

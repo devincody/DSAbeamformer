@@ -166,12 +166,13 @@ int main(int argc, char *argv[]){
 
 	/* Directions for Beamforming */
 	for (int i = 0; i < N_BEAMS; i++){
-		dir[i] = i*DEG2RAD(7.0)/(N_BEAMS-1) - DEG2RAD(3.5);
+		dir[i] = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
 	}
 
 	#if DEBUG
 		float *d_vec_ones;		// Vector of all ones for de-dispersion
 		float *vec_ones = new float[N_FREQUENCIES];
+
 		/* Create vector of ones for Dedispersion */
 		for (int i = 0; i < N_FREQUENCIES; i++){
 			vec_ones[i] = 1.0;
@@ -278,11 +279,11 @@ int main(int argc, char *argv[]){
 	 ***********************************/
 
 	#if DEBUG
-		#if 1
+		#if GENERATE_TEST_DATA
 			float test_direction;
 			char high, low;
 			for (int iii = 0; iii < N_DIRS; iii++){
-				test_direction = DEG2RAD(-3.5) + iii*DEG2RAD(7.0)/(N_DIRS-1);
+				test_direction = DEG2RAD(-HALF_FOV) + iii*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
 				for (int i = 0; i < N_FREQUENCIES; i++){
 					float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
 					// std::cout << "freq: " << freq << std::endl;
@@ -299,7 +300,7 @@ int main(int argc, char *argv[]){
 				}
 			}
 		#else
-			memset(data, 0x70, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));
+			memset(data, BOGUS_DATA, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));
 			std::cout << "BOGUS DATA " << std::endl;
 		#endif
 	#endif 
@@ -323,72 +324,72 @@ int main(int argc, char *argv[]){
 	***************************************************/
 
 	#ifndef DEBUG
-	// DADA stuff
-	log = multilog_open ("real", 0);
-	multilog_add (log, stderr);
-	multilog (log, LOG_INFO, "creating hdu\n");
+		// DADA stuff
+		log = multilog_open ("real", 0);
+		multilog_add (log, stderr);
+		multilog (log, LOG_INFO, "creating hdu\n");
 
-	// create dada hdu
-	hdu_in	= dada_hdu_create (log);
-	// set the input hdu key
-	dada_hdu_set_key (hdu_in, in_key);
+		// create dada hdu
+		hdu_in	= dada_hdu_create (log);
+		// set the input hdu key
+		dada_hdu_set_key (hdu_in, in_key);
 
-	// connect to dada buffer
-	if (dada_hdu_connect (hdu_in) < 0) {
-		printf ("could not connect to dada buffer\n");
-		return EXIT_FAILURE;
-	}
+		// connect to dada buffer
+		if (dada_hdu_connect (hdu_in) < 0) {
+			printf ("could not connect to dada buffer\n");
+			return EXIT_FAILURE;
+		}
 
-	// lock read on buffer
-	if (dada_hdu_lock_read (hdu_in) < 0) {
-		printf ("could not lock to dada buffer\n");
-		return EXIT_FAILURE;
-	}
+		// lock read on buffer
+		if (dada_hdu_lock_read (hdu_in) < 0) {
+			printf ("could not lock to dada buffer\n");
+			return EXIT_FAILURE;
+		}
 
-	// Bind to cpu core
-	if (core >= 0)
-	{
-		printf("binding to core %d\n", core);
-		if (dada_bind_thread_to_core(core) < 0)
-		printf("failed to bind to core %d\n", core);
-	}
+		// Bind to cpu core
+		if (core >= 0)
+		{
+			printf("binding to core %d\n", core);
+			if (dada_bind_thread_to_core(core) < 0)
+			printf("failed to bind to core %d\n", core);
+		}
 
-	#if VERBOSE
-		multilog (log, LOG_INFO, "Done setting up buffer\n");
-	#endif
+		#if VERBOSE
+			multilog (log, LOG_INFO, "Done setting up buffer\n");
+		#endif
 	#endif
 
 	/***************************************************
 	Deal with Headers (FOR DADA)
 	***************************************************/
 	#ifndef DEBUG
-	// read the headers from the input HDU and mark as cleared
-	// will block until header is present in dada ring buffer
-	char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
-	if (!header_in)
-	{
-		multilog(log ,LOG_ERR, "main: could not read next header\n");
-		dsaX_dbgpu_cleanup (hdu_in, log);
-		return EXIT_FAILURE;
-	}
+		// read the headers from the input HDU and mark as cleared
+		// will block until header is present in dada ring buffer
+		char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
+		if (!header_in)
+		{
+			multilog(log ,LOG_ERR, "main: could not read next header\n");
+			dsaX_dbgpu_cleanup (hdu_in, log);
+			return EXIT_FAILURE;
+		}
 
-	if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
-	{
-		multilog (log, LOG_ERR, "could not mark header block cleared\n");
-		dsaX_dbgpu_cleanup (hdu_in, log);
-		return EXIT_FAILURE;
-	}
+		if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
+		{
+			multilog (log, LOG_ERR, "could not mark header block cleared\n");
+			dsaX_dbgpu_cleanup (hdu_in, log);
+			return EXIT_FAILURE;
+		}
 
-	// size of block in dada buffer
-	uint64_t block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
-	uint64_t bytes_read = 0, block_id;
-	char *block;
+		// size of block in dada buffer
+		uint64_t block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
+		uint64_t bytes_read = 0, block_id;
+		char *block;
 
-	#if VERBOSE
-		multilog (log, LOG_INFO, "Done setting up header \n");
-	#endif
-	
-	std::cout << "block size is: " << block_size << std::endl;
+		#if VERBOSE
+			multilog (log, LOG_INFO, "Done setting up header \n");
+		#endif
+		
+		std::cout << "block size is: " << block_size << std::endl;
 	#endif
 
 
@@ -412,26 +413,27 @@ int total_separation = 4;
 						Copy Data to GPU
 		**************************************************/
 		if ((blocks_transfer_queue - blocks_analyzed < total_separation) && (blocks_transfer_queue - blocks_transferred < transfer_separation)){
-
-			// std::cout << "index: " << N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU) << std::endl;
-			// std::cout << "index: " << N_BYTES_PER_BLOCK*(blocks_transfer_queue) << std::endl;
-			// std::cout << "index: " << N_BYTES_PER_BLOCK << std::endl;
-
+			/* Data is copied iff the analysis steps and transfer rates are keeping up */
 
 			#if DEBUG
 				/***********************************
 				IF debugging, copy from "data" array
 				***********************************/
 				if (blocks_transfer_queue < N_DIRS/N_GEMMS_PER_BLOCK){
+					/* Only initiate transfers if fewer than N_DIRS directions have been analyzed */
+
 					#if VERBOSE 
 						std::cout << "VERBOSE: Async copy" << std::endl;
 					#endif
+
+					/* Copy Block */
 					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
 												&data[N_BYTES_PER_BLOCK*blocks_transfer_queue],
 												N_BYTES_PER_BLOCK, 
 												cudaMemcpyHostToDevice,
 												HtoDstream));
 
+					/* Generate Cuda event which will indicate when the block has been transfered*/
 					gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_on_GPU)], HtoDstream));
 					blocks_transfer_queue++;
 				}
@@ -447,19 +449,22 @@ int total_separation = 4;
 				}
 
 				if (bytes_read < block_size){
-					// multilog(log, LOG_INFO, "Not enough bytes\n");
+					/* If there isn't enough data in the block, end the observation */
 					observation_complete = 1;
-					// cudaProfilerStop();
 					break;
 				}
 
+				/* Copy Block */
 				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
 											block,
 											N_BYTES_PER_BLOCK, 
 											cudaMemcpyHostToDevice,
 											HtoDstream));
 
+				/* Mark PSRDADA as read */
 				ipcio_close_block_read (hdu_in->data_block, bytes_read);
+
+				/* Generate Cuda event which will indicate when the block has been transfered*/
 				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_on_GPU)], HtoDstream));
 				blocks_transfer_queue++;
 			#endif
@@ -469,13 +474,16 @@ int total_separation = 4;
 				Check if data has been transfered
 		**************************************************/
 		for (uint64_t event = blocks_transferred; event < blocks_transfer_queue; event ++){
+			/* Iterate through all left-over blocks and see if they've been finished */
 			if(cudaEventQuery(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
-				blocks_transferred ++;
-
+			
 				#if VERBOSE
 					std::cout << "Block " << event << " transfered to GPU" << std::endl;
 				#endif
 
+				blocks_transferred ++;
+
+				/* Destroy and Recreate Flags */
 				gpuErrchk(cudaEventDestroy(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]));
 				gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
 			} else {
@@ -495,10 +503,6 @@ int total_separation = 4;
 				#endif
 
 				for (int st = 0; st < N_STREAMS; st++){
-					// gpuErrchk(cudaStreamWaitEvent(stream[st], BlockTransferredSync[(blocks_analyzed+1)%N_BLOCKS_on_GPU], 0));
-					// gpuErrchk(cudaStreamSynchronize(stream[st]));
-					//cudaStreamSynchronize(stream[st]);
-
 
 					/* Expand input from 4-bit integers to 8-bit integers */
 					expand_input<<<10000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*(blocks_analysis_queue%N_BLOCKS_on_GPU) + timeSlice[st])],
@@ -531,7 +535,7 @@ int total_separation = 4;
 						current_gemm = blocks_analysis_queue*N_GEMMS_PER_BLOCK + timeSlice[st];
 						std::cout << "Current GEMM: " << current_gemm << std::endl;
 
-						// Sum over all 256 frequencies with a matrix-vector multiplication.
+						/* Sum over all 256 frequencies with a matrix-vector multiplication. */
 						gpuBLASchk(cublasSgemv(handle[st], CUBLAS_OP_N,
 									N_BEAMS, N_FREQUENCIES,
 									d_f_one,

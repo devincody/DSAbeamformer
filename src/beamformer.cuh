@@ -43,22 +43,44 @@
 #endif
 
 
+/***************************************************
+				Configuration 
+***************************************************/
 
-// DSA CONSTANTS
+
+
+
+
+#if DEBUG
+	/* If 1 simulates a point source which varies across the field of view
+	   if 0 Bogus data is used instead */
+	#define GENERATE_TEST_DATA 1
+	#define BOGUS_DATA 0x70
+#endif
+
+/***************************************************
+			    DSA Constants
+***************************************************/
+
 #define N_BEAMS 256
 #define N_ANTENNAS 64
 #define N_FREQUENCIES 256
+#define HALF_FOV 3.5
 
 #define N_POL 2				//Number of polarizations
 #define N_CX 2				//Number of real numbers in a complex number, namely 2
 
 #if DEBUG
+	/* Number of time samples to average after beamforming */
 	#define N_AVERAGING 1
 #else
 	#define N_AVERAGING 16
 #endif
 
-// DATA constants
+
+/***************************************************
+				DATA constants
+***************************************************/
 
 /* How many matrix multiplications could be executed based on the amount of data on the GPU*/
 #define N_GEMMS_PER_GPU 256

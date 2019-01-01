@@ -479,9 +479,6 @@ int total_separation = 4;
 				gpuErrchk(cudaEventDestroy(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]));
 				gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
 			} else {
-				#if VERBOSE
-					std::cout << "No more blocks" << std::endl;
-				#endif
 				break; // dont need to check later blocks if current block has not finished
 			}
 		}
@@ -489,9 +486,6 @@ int total_separation = 4;
 		/**************************************************
 					Initiate Beamforming
 		**************************************************/
-		#if VERBOSE
-			std::cout << "Immediately after: No more blocks" << std::endl;
-		#endif
 		if (blocks_analysis_queue < blocks_transferred){
 
 			for (int part = 0; part < N_GEMMS_PER_BLOCK/N_STREAMS; part++){
@@ -630,14 +624,14 @@ int total_separation = 4;
 		f.close();
 	#endif
 
-	std::cout << "freeing" << std::endl;
+	std::cout << "Freeing Structures" << std::endl;
 
 	for (int i = 0; i < N_STREAMS; i++){
 		gpuErrchk(cudaStreamDestroy(stream[i]));
 		gpuBLASchk(cublasDestroy(handle[i]));
 	}
 
-	std::cout << "freeing cuda" << std::endl;
+	std::cout << "Freed cuda streams and handles" << std::endl;
 
 	gpuErrchk(cudaFree(d_A));
 	gpuErrchk(cudaFree(d_C));
@@ -655,29 +649,24 @@ int total_separation = 4;
 	#endif
 
 
-	std::cout << "freeing host" << std::endl;
+	std::cout << "Freed GPU memory" << std::endl;
 
 	// gpuErrchk(cudaHostUnregister(data));
 	gpuErrchk(cudaHostUnregister(beam_out));
-
-
 
 	delete[] A;
 	delete[] pos;
 	delete[] dir;
 	delete[] beam_out;
-	delete[] vec_ones;
-	std::cout << "freed all1" << std::endl;
-
 
 	#if DEBUG
 		delete[] data;
+		delete[] vec_ones;
 		gpuErrchk(cudaHostUnregister(out_dedispersed));
-		std::cout << "freed all2" << std::endl;
 		delete[] out_dedispersed;
 	#endif
 
-	std::cout << "freed all4" << std::endl;
+	std::cout << "Freed CPU memory" << std::endl;
 
 	return 0;
 }

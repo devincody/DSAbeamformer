@@ -300,6 +300,7 @@ int main(int argc, char *argv[]){
 				}
 			}
 		#else
+			/* Generates Bogus data, typically 0x70 */
 			memset(data, BOGUS_DATA, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));
 			std::cout << "BOGUS DATA " << std::endl;
 		#endif
@@ -403,7 +404,7 @@ int total_separation = 4;
 	while (!observation_complete){
 		
 		#if VERBOSE
-			// Header to be printed during every loop
+			/* Header to be printed during every loop */
 			std::cout << "##########################################" << std::endl;
 			std::cout << "A: " << blocks_analyzed <<  ", AQ: " << blocks_analysis_queue << ", T: " << blocks_transferred << ", TQ: " << blocks_transfer_queue << std::endl;
 		#endif 
@@ -412,8 +413,9 @@ int total_separation = 4;
 		/**************************************************
 						Copy Data to GPU
 		**************************************************/
+
+		/* Data is copied iff the analysis steps and transfer rates are keeping up */
 		if ((blocks_transfer_queue - blocks_analyzed < total_separation) && (blocks_transfer_queue - blocks_transferred < transfer_separation)){
-			/* Data is copied iff the analysis steps and transfer rates are keeping up */
 
 			#if DEBUG
 				/***********************************
@@ -473,8 +475,9 @@ int total_separation = 4;
 		/**************************************************
 				Check if data has been transfered
 		**************************************************/
+
+		/* Iterate through all left-over blocks and see if they've been finished */
 		for (uint64_t event = blocks_transferred; event < blocks_transfer_queue; event ++){
-			/* Iterate through all left-over blocks and see if they've been finished */
 			if(cudaEventQuery(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
 			
 				#if VERBOSE
@@ -573,8 +576,7 @@ int total_separation = 4;
 				//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
 				blocks_analyzed++;
 				#if VERBOSE
-					std::cout<< "Done analyzing block. Analyzed = " << blocks_analyzed << " Transferred = " << blocks_transferred <<std::endl;
-					std::cout << "async, Transferred Q: " << blocks_transfer_queue << " Analyzed Q : " << blocks_analysis_queue << std::endl;
+					std::cout << "Block " << event << " Analyzed" << std::endl;
 				#endif
 				gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)]));
 				gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
@@ -587,9 +589,6 @@ int total_separation = 4;
 				#endif
 				
 			} else {
-				#if VERBOSE
-					std::cout << "Analysis event: " << event << " has not completed" << std::endl;
-				#endif
 				break; // If previous analyzed blocks have not been finished, there's no reason to check the next blocks
 			}
 		}

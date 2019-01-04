@@ -31,7 +31,7 @@ int main(int argc, char *argv[]){
 	Parse Command Line Options
 	***************************************************/
 	int arg = 0;
-	std::ofstream input_file;
+	std::ifstream input_file;
 
 	#if DEBUG	
 		char legal_commandline_options[] = {'f',':','d',':','h'};
@@ -41,7 +41,6 @@ int main(int argc, char *argv[]){
 
 	while ((arg=getopt(argc, argv,legal_commandline_options)) != -1) {
 		switch (arg) {
-		
 			#ifndef DEBUG
 			case 'c':
 				/* to bind to a cpu core */

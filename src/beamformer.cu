@@ -12,7 +12,7 @@ int main(int argc, char *argv[]){
 	#ifndef DEBUG
 		dada_hdu_t* hdu_in = 0;
 		multilog_t* log = 0;
-		int core = -1;
+		int core = 0;
 		key_t in_key = 0x0000dada;
 		uint64_t header_size = 0;
 	#endif
@@ -33,15 +33,14 @@ int main(int argc, char *argv[]){
 	int arg = 0;
 	std::ifstream input_file;
 
-	#if DEBUG	
-		char legal_commandline_options[] = {'f',':','d',':','h'};
-	#else
-		char legal_commandline_options[] = {'c',':','k',':','g',':','f',':','d',':','h'};
-	#endif
+	// #if DEBUG	
+	// 	char legal_commandline_options[] = {'f',':','d',':','h'};
+	// #else
+	// 	char legal_commandline_options[] = {'c',':','k',':','g',':','f',':','d',':','h'};
+	// #endif
 
-	while ((arg=getopt(argc, argv,legal_commandline_options)) != -1) {
+	while ((arg=getopt(argc, argv,"c:k:g:f:d:h")) != -1) {
 		switch (arg) {
-			#ifndef DEBUG
 			case 'c':
 				/* to bind to a cpu core */
 				if (optarg){
@@ -68,12 +67,11 @@ int main(int argc, char *argv[]){
 					printf ("ERROR: -g flag requires argument\n");
 					return EXIT_FAILURE;
 				}
-			#endif
 
 			case 'f':
 				/* To setup antenna position locations */
 				char* pos_file_name = (char *) calloc(256,sizeof(char));
-				if (sscanf (optarg, "%s", &pos_file_name) != 1) {
+				if (sscanf (optarg, "%s", pos_file_name) != 1) {
 					fprintf (stderr, "beam: could not parse position file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
@@ -92,10 +90,11 @@ int main(int argc, char *argv[]){
 				pos_set = true;
 				free(pos_file_name);
 				break;
+
 			case 'd':
 				/* To setup beamforming directions */
 				char* dir_file_name = (char *) calloc(256,sizeof(char));
-				if (sscanf (optarg, "%s", &dir_file_name) != 1) {
+				if (sscanf (optarg, "%s", dir_file_name) != 1) {
 					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
@@ -114,6 +113,7 @@ int main(int argc, char *argv[]){
 				dir_set = true;
 				free(dir_file_name);
 				break;
+				
 			case 'h':
 				usage();
 				return EXIT_SUCCESS;

@@ -31,12 +31,12 @@ int main(int argc, char *argv[]){
 	Parse Command Line Options
 	***************************************************/
 	int arg = 0;
-	ofstream input_file;
+	std::ofstream input_file;
 
 	#if DEBUG	
-		std::string legal_commandline_options = "f:d:h";
+		char legal_commandline_options[] = {'f',':','d',':','h'};
 	#else
-		std::string legal_commandline_options = "c:k:g:f:d:h";
+		char legal_commandline_options[] = {'c',':','k',':','g',':','f',':','d',':','h'};
 	#endif
 
 	while ((arg=getopt(argc, argv,legal_commandline_options)) != -1) {
@@ -82,8 +82,8 @@ int main(int argc, char *argv[]){
 				int nant;
 				input_file >> nant;
 				if (nant != N_ANTENNAS){
-					cout << "Number of antennas in file (" << nant << ") does not match N_ANTENNAS ("<< N_ANTENNAS << ")" <<std::cout;
-					cout << "Excess antennas will be ignored, missing antennas will be set to 0." << std::cout
+					std::cout << "Number of antennas in file (" << nant << ") does not match N_ANTENNAS ("<< N_ANTENNAS << ")" <<std::cout;
+					std::cout << "Excess antennas will be ignored, missing antennas will be set to 0." << std::cout;
 				}
 
 				for (int ant = 0; ant < N_ANTENNAS; ant++){
@@ -103,8 +103,8 @@ int main(int argc, char *argv[]){
 				int nbeam;
 				input_file >> nbeam;
 				if (nbeam != N_BEAMS){
-					cout << "Number of beams in file (" << nbeam << ") does not match N_BEAMS ("<< N_BEAMS << ")" <<std::cout;
-					cout << "Excess beams will be ignored, missing beams will be set to 0." << std::cout
+					std::cout << "Number of beams in file (" << nbeam << ") does not match N_BEAMS ("<< N_BEAMS << ")" <<std::cout;
+					std::cout << "Excess beams will be ignored, missing beams will be set to 0." << std::cout;
 				}
 
 				for (int beam_idx = 0; beam_idx < N_BEAMS; beam_idx++){
@@ -122,14 +122,14 @@ int main(int argc, char *argv[]){
 	if (!pos_set){
 		/* Populate location/direction Matricies */
 		for (int i = 0; i < N_ANTENNAS; i++){
-			pos[i] = i*500.0/(N_ANTENNAS-1) - 250.0;
+			pos[i].x = i*500.0/(N_ANTENNAS-1) - 250.0;
 		}
 	}
 
 	if (!dir_set){
 		/* Directions for Beamforming */
 		for (int i = 0; i < N_BEAMS; i++){
-			dir[i] = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
+			dir[i].theta = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
 		}
 	}
 

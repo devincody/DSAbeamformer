@@ -32,7 +32,7 @@ int main(int argc, char *argv[]){
 	***************************************************/
 	int arg = 0;
 	std::ifstream input_file;
-
+	char* file_name = (char *) calloc(256,sizeof(char));
 	// #if DEBUG	
 	// 	char legal_commandline_options[] = {'f',':','d',':','h'};
 	// #else
@@ -70,12 +70,12 @@ int main(int argc, char *argv[]){
 
 			case 'f':
 				/* To setup antenna position locations */
-				char* pos_file_name = (char *) calloc(256,sizeof(char));
-				if (sscanf (optarg, "%s", pos_file_name) != 1) {
+				
+				if (sscanf (optarg, "%s", file_name) != 1) {
 					fprintf (stderr, "beam: could not parse position file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
-				input_file.open(pos_file_name);
+				input_file.open(file_name);
 				int nant;
 				input_file >> nant;
 				if (nant != N_ANTENNAS){
@@ -88,17 +88,16 @@ int main(int argc, char *argv[]){
 					std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
 				}
 				pos_set = true;
-				free(pos_file_name);
 				break;
 
 			case 'd':
 				/* To setup beamforming directions */
-				char* dir_file_name = (char *) calloc(256,sizeof(char));
-				if (sscanf (optarg, "%s", dir_file_name) != 1) {
+				
+				if (sscanf (optarg, "%s", file_name) != 1) {
 					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
-				input_file.open(dir_file_name);
+				input_file.open(file_name);
 				int nbeam;
 				input_file >> nbeam;
 				if (nbeam != N_BEAMS){
@@ -111,14 +110,14 @@ int main(int argc, char *argv[]){
 					std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
 				}
 				dir_set = true;
-				free(dir_file_name);
 				break;
-				
+
 			case 'h':
 				usage();
 				return EXIT_SUCCESS;
 		}
 	}
+	free(file_name);
 
 	if (!pos_set){
 		/* Populate location/direction Matricies */

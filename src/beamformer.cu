@@ -81,8 +81,8 @@ int main(int argc, char *argv[]){
 				int nant;
 				input_file >> nant;
 				if (nant != N_ANTENNAS){
-					std::cout << "Number of antennas in file (" << nant << ") does not match N_ANTENNAS ("<< N_ANTENNAS << ")" <<std::cout;
-					std::cout << "Excess antennas will be ignored, missing antennas will be set to 0." << std::cout;
+					std::cout << "Number of antennas in file (" << nant << ") does not match N_ANTENNAS ("<< N_ANTENNAS << ")" <<std::endl;
+					std::cout << "Excess antennas will be ignored, missing antennas will be set to 0." << std::endl;
 				}
 
 				for (int ant = 0; ant < N_ANTENNAS; ant++){
@@ -90,6 +90,7 @@ int main(int argc, char *argv[]){
 					std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
 				}
 				pos_set = true;
+				free(pos_file_name);
 				break;
 			case 'd':
 				/* To setup beamforming directions */
@@ -102,8 +103,8 @@ int main(int argc, char *argv[]){
 				int nbeam;
 				input_file >> nbeam;
 				if (nbeam != N_BEAMS){
-					std::cout << "Number of beams in file (" << nbeam << ") does not match N_BEAMS ("<< N_BEAMS << ")" <<std::cout;
-					std::cout << "Excess beams will be ignored, missing beams will be set to 0." << std::cout;
+					std::cout << "Number of beams in file (" << nbeam << ") does not match N_BEAMS ("<< N_BEAMS << ")" <<std::endl;
+					std::cout << "Excess beams will be ignored, missing beams will be set to 0." << std::endl;
 				}
 
 				for (int beam_idx = 0; beam_idx < N_BEAMS; beam_idx++){
@@ -111,6 +112,7 @@ int main(int argc, char *argv[]){
 					std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
 				}
 				dir_set = true;
+				free(dir_file_name);
 				break;
 			case 'h':
 				usage();

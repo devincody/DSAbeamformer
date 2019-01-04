@@ -33,40 +33,43 @@ int main(int argc, char *argv[]){
 	int arg = 0;
 	std::ifstream input_file;
 	char* file_name = (char *) calloc(256,sizeof(char));
-	// #if DEBUG	
-	// 	char legal_commandline_options[] = {'f',':','d',':','h'};
-	// #else
-	// 	char legal_commandline_options[] = {'c',':','k',':','g',':','f',':','d',':','h'};
-	// #endif
+	#if DEBUG	
+		char legal_commandline_options[] = {'f',':','d',':','h'};
+	#else
+		char legal_commandline_options[] = {'c',':','k',':','g',':','f',':','d',':','h'};
+		//"c:k:g:f:d:h"
+	#endif
 
-	while ((arg=getopt(argc, argv,"c:k:g:f:d:h")) != -1) {
+	while ((arg=getopt(argc, argv, legal_commandline_options)) != -1) {
 		switch (arg) {
-			case 'c':
-				/* to bind to a cpu core */
-				if (optarg){
-					core = atoi(optarg);
+			#ifndef
+				case 'c':
+					/* to bind to a cpu core */
+					if (optarg){
+						core = atoi(optarg);
+						break;
+					} else {
+						printf ("ERROR: -c flag requires argument\n");
+						return EXIT_FAILURE;
+					}
+					
+				case 'k':
+					/* to set the dada key */
+					if (sscanf (optarg, "%x", &in_key) != 1) {
+						fprintf (stderr, "beam: could not parse key from %s\n", optarg);
+						return EXIT_FAILURE;
+					}
 					break;
-				} else {
-					printf ("ERROR: -c flag requires argument\n");
-					return EXIT_FAILURE;
-				}
-				
-			case 'k':
-				/* to set the dada key */
-				if (sscanf (optarg, "%x", &in_key) != 1) {
-					fprintf (stderr, "beam: could not parse key from %s\n", optarg);
-					return EXIT_FAILURE;
-				}
-				break;
-			case 'g':
-				/* to set the gpu */
-				if (optarg){
-					gpu = atoi(optarg);
-					break;
-				} else {
-					printf ("ERROR: -g flag requires argument\n");
-					return EXIT_FAILURE;
-				}
+				case 'g':
+					/* to set the gpu */
+					if (optarg){
+						gpu = atoi(optarg);
+						break;
+					} else {
+						printf ("ERROR: -g flag requires argument\n");
+						return EXIT_FAILURE;
+					}
+			#endif
 
 			case 'f':
 				/* To setup antenna position locations */

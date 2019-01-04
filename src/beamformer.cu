@@ -72,7 +72,7 @@ int main(int argc, char *argv[]){
 
 			case 'f':
 				/* To setup antenna position locations */
-				char* pos_file_name = calloc(256,sizeof(char));
+				char* pos_file_name = (char *) calloc(256,sizeof(char));
 				if (sscanf (optarg, "%s", &pos_file_name) != 1) {
 					fprintf (stderr, "beam: could not parse position file from %s\n", optarg);
 					return EXIT_FAILURE;
@@ -93,7 +93,7 @@ int main(int argc, char *argv[]){
 				break;
 			case 'd':
 				/* To setup beamforming directions */
-				char* dir_file_name = calloc(256,sizeof(char));
+				char* dir_file_name = (char *) calloc(256,sizeof(char));
 				if (sscanf (optarg, "%s", &dir_file_name) != 1) {
 					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
 					return EXIT_FAILURE;

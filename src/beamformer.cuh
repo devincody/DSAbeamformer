@@ -164,7 +164,7 @@ public:
 class beam_direction{
 public:
 	float theta, phi;
-	beam_direction(){x = 0; y = 0; z = 0;}
+	beam_direction(){theta = 0; phi = 0;}
 	~beam_direction(){}
 };
 

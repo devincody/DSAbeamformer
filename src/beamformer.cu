@@ -21,8 +21,8 @@ int main(int argc, char *argv[]){
 	Antenna Location & Beam Direction Variables
 	***************************************************/
 
-	float* pos = new antenna[N_ANTENNAS]();		// Locations of antennas
-	float* dir = new beam_direction[N_BEAMS]();		// Direction of bemformed beams
+	antenna* pos = new antenna[N_ANTENNAS]();		// Locations of antennas
+	beam_direction* dir = new beam_direction[N_BEAMS]();		// Direction of bemformed beams
 
 	bool pos_set = false;
 	bool dir_set = false;
@@ -36,7 +36,7 @@ int main(int argc, char *argv[]){
 	#if DEBUG	
 		std::string legal_commandline_options = "f:d:h";
 	#else
-		std::string legal_commandline_options = "c:k:g:f:d:h"
+		std::string legal_commandline_options = "c:k:g:f:d:h";
 	#endif
 
 	while ((arg=getopt(argc, argv,legal_commandline_options)) != -1) {

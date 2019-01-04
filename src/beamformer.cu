@@ -1,11 +1,5 @@
 #include "beamformer.cuh"
 
-// nvcc src/beamformer.cu -o bin/beam -lcublas
-
-//sudo dada_db -k baab -d
-// sudo dada_db -k baab -n 8 -b 268435456 -l -p
-//bin/beam -k baab -c 0 -g 0
-
 
 int main(int argc, char *argv[]){
 	
@@ -24,14 +18,33 @@ int main(int argc, char *argv[]){
 	#endif
 
 	/***************************************************
+	Antenna Location & Beam Direction Variables
+	***************************************************/
+
+	float* pos = new antenna[N_ANTENNAS]();		// Locations of antennas
+	float* dir = new beam_direction[N_BEAMS]();		// Direction of bemformed beams
+
+	bool pos_set = false;
+	bool dir_set = false;
+
+	/***************************************************
 	Parse Command Line Options
 	***************************************************/
-	#ifndef DEBUG
 	int arg = 0;
-	while ((arg=getopt(argc,argv,"c:k:g:h")) != -1) {
+	ofstream input_file;
+
+	#if DEBUG	
+		std::string legal_commandline_options = "f:d:h";
+	#else
+		std::string legal_commandline_options = "c:k:g:f:d:h"
+	#endif
+
+	while ((arg=getopt(argc, argv,legal_commandline_options)) != -1) {
 		switch (arg) {
-		// to bind to a cpu core
+		
+			#ifndef DEBUG
 			case 'c':
+				/* to bind to a cpu core */
 				if (optarg){
 					core = atoi(optarg);
 					break;
@@ -39,14 +52,16 @@ int main(int argc, char *argv[]){
 					printf ("ERROR: -c flag requires argument\n");
 					return EXIT_FAILURE;
 				}
-				// to set the dada key
+				
 			case 'k':
+				/* to set the dada key */
 				if (sscanf (optarg, "%x", &in_key) != 1) {
-				fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
-				return EXIT_FAILURE;
+					fprintf (stderr, "beam: could not parse key from %s\n", optarg);
+					return EXIT_FAILURE;
 				}
 				break;
 			case 'g':
+				/* to set the gpu */
 				if (optarg){
 					gpu = atoi(optarg);
 					break;
@@ -54,13 +69,69 @@ int main(int argc, char *argv[]){
 					printf ("ERROR: -g flag requires argument\n");
 					return EXIT_FAILURE;
 				}
+			#endif
+
+			case 'f':
+				/* To setup antenna position locations */
+				char* pos_file_name = calloc(256,sizeof(char));
+				if (sscanf (optarg, "%s", &pos_file_name) != 1) {
+					fprintf (stderr, "beam: could not parse position file from %s\n", optarg);
+					return EXIT_FAILURE;
+				}
+				input_file.open(pos_file_name);
+				int nant;
+				input_file >> nant;
+				if (nant != N_ANTENNAS){
+					cout << "Number of antennas in file (" << nant << ") does not match N_ANTENNAS ("<< N_ANTENNAS << ")" <<std::cout;
+					cout << "Excess antennas will be ignored, missing antennas will be set to 0." << std::cout
+				}
+
+				for (int ant = 0; ant < N_ANTENNAS; ant++){
+					input_file >> pos[ant].x >> pos[ant].y >> pos[ant].z;
+					std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
+				}
+				pos_set = true;
+				break;
+			case 'd':
+				/* To setup beamforming directions */
+				char* dir_file_name = calloc(256,sizeof(char));
+				if (sscanf (optarg, "%s", &dir_file_name) != 1) {
+					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
+					return EXIT_FAILURE;
+				}
+				input_file.open(dir_file_name);
+				int nbeam;
+				input_file >> nbeam;
+				if (nbeam != N_BEAMS){
+					cout << "Number of beams in file (" << nbeam << ") does not match N_BEAMS ("<< N_BEAMS << ")" <<std::cout;
+					cout << "Excess beams will be ignored, missing beams will be set to 0." << std::cout
+				}
+
+				for (int beam_idx = 0; beam_idx < N_BEAMS; beam_idx++){
+					input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
+					std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
+				}
+				dir_set = true;
+				break;
 			case 'h':
 				usage();
 				return EXIT_SUCCESS;
 		}
 	}
-	#endif
 
+	if (!pos_set){
+		/* Populate location/direction Matricies */
+		for (int i = 0; i < N_ANTENNAS; i++){
+			pos[i] = i*500.0/(N_ANTENNAS-1) - 250.0;
+		}
+	}
+
+	if (!dir_set){
+		/* Directions for Beamforming */
+		for (int i = 0; i < N_BEAMS; i++){
+			dir[i] = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
+		}
+	}
 
 
 	/***********************************
@@ -126,7 +197,7 @@ int main(int argc, char *argv[]){
 	 *			HOST Variables		   *
 	 ***********************************/
 	#if DEBUG
-		char *data = new char[N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS]();
+		char *data = new char[N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS](); // storage for test signals
 		gpuErrchk(cudaHostRegister(data, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
 	#endif
 
@@ -137,57 +208,36 @@ int main(int argc, char *argv[]){
 
 
 	#if DEBUG
-		std::cout << "data size: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS << std::endl;
+		/* File for data output */
 		std::ofstream f;
-		f.open("bin/data.py");
+		f.open("bin/data.py"); // written such that it can be imported into any python file
 		f << "A = [[";
-		// std::mutex file_mutex;
 
+
+		/* Vectors of all ones for de-dispersion */
 		float *d_dedispersed;	// Data after being de-dispersed
-		
 		float *out_dedispersed = new float[N_BEAMS*N_DIRS]();
-
 		gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_DIRS*sizeof(float), cudaHostRegisterPortable));
-	#endif
 
-
-
-
-	/***********************************
-	 *		Beamforming Variables	   *
-	 ***********************************/
-	float* pos = new float[N_ANTENNAS];		// Locations of antennas
-	float* dir = new float[N_BEAMS];		// Direction of bemformed beams
-
-	/* Populate location/direction Matricies */
-	for (int i = 0; i < N_ANTENNAS; i++){
-		pos[i] = i*500.0/(N_ANTENNAS-1) - 250.0;
-	}
-
-	/* Directions for Beamforming */
-	for (int i = 0; i < N_BEAMS; i++){
-		dir[i] = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
-	}
-
-	#if DEBUG
-		float *d_vec_ones;		// Vector of all ones for de-dispersion
-		float *vec_ones = new float[N_FREQUENCIES];
-
-		/* Create vector of ones for Dedispersion */
+		float *d_vec_ones;		
+		float *vec_ones = new float[N_FREQUENCIES]; 
 		for (int i = 0; i < N_FREQUENCIES; i++){
 			vec_ones[i] = 1.0;
 		}
 	#endif
 
 
-	/* Fourier Coefficient Matrix */
+	/***********************************
+	 *		Fourier Coefficients 	   *
+	 ***********************************/
+
 	for (int i = 0; i < N_FREQUENCIES; i++){
 		float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*bw_per_channel;
 		float wavelength = C_SPEED/(1E9*freq);
 		for (int j = 0; j < N_ANTENNAS; j++){
 			for (int k = 0; k < N_BEAMS; k++){
-				A[i*A_stride + j*N_BEAMS + k].x = round(MAX_VAL*cos(-2*PI*pos[j]*sin(dir[k])/wavelength));
-				A[i*A_stride + j*N_BEAMS + k].y = round(MAX_VAL*sin(-2*PI*pos[j]*sin(dir[k])/wavelength));
+				A[i*A_stride + j*N_BEAMS + k].x = round(MAX_VAL*cos(-2*PI*pos[j].x*sin(dir[k].theta)/wavelength));
+				A[i*A_stride + j*N_BEAMS + k].y = round(MAX_VAL*sin(-2*PI*pos[j].x*sin(dir[k].theta)/wavelength));
 			}
 		}
 	}
@@ -291,8 +341,8 @@ int main(int argc, char *argv[]){
 					for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
 						for (int k = 0; k < N_ANTENNAS; k++){
 
-							high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength))); //real
-							low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength))); //imag
+							high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k].x*sin(test_direction)/wavelength))); //real
+							low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k].x*sin(test_direction)/wavelength))); //imag
 
 							data[iii*N_BYTES_PRE_EXPANSION_PER_GEMM + i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 						}

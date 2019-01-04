@@ -47,10 +47,6 @@
 				Configuration 
 ***************************************************/
 
-
-
-
-
 #if DEBUG
 	/* If 1 simulates a point source which varies across the field of view
 	   if 0 Bogus data is used instead */
@@ -158,6 +154,19 @@ typedef char char4_t[4]; //four chars = 32-bit so global memory bandwidth usage 
 typedef char char8_t[8]; //eight chars = 64-bit so global memory bandwidth usage is optimal
 typedef CxInt8_t cuChar4_t[4];
 
+class antenna{
+public:
+	float x, y, z;
+	antenna(){x = 0; y = 0; z = 0;}
+	~antenna(){}
+};
+
+class beam_direction{
+public:
+	float theta, phi;
+	beam_direction(){x = 0; y = 0; z = 0;}
+	~beam_direction(){}
+};
 
 /***********************************
  *		Defined Functions		   *

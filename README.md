@@ -10,6 +10,12 @@ DSA is a 100-element radio interferometer located at the Owens Valley Radio Obse
 ## What does this code do?
 This is a collection of gpu-accelerated code which searches for FRBs in real time using beamforming. When run on GTX 1080 Ti devices, the code will produce 1 set of (256) beams every ~0.26 ms.
 
+## Prerequisites
+You should have the following code packages installed before using DART:
+
+1. Cuda 10.0
+2. PSRDADA
+
 ## How does it work?
 
 ### Overview

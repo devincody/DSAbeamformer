@@ -1,3 +1,4 @@
+#include "beamformer.hh"
 #include "beamformer.cuh"
 
 
@@ -8,7 +9,7 @@ int main(int argc, char *argv[]){
 	#endif
 	
 	int gpu = 0;
-	int observation_complete=0;
+	int observation_complete = 0;
 
 	/***************************************************
 	DADA VARIABLES
@@ -24,7 +25,7 @@ int main(int argc, char *argv[]){
 	/***************************************************
 	Antenna Location & Beam Direction Variables
 	Will be set with a command line option (filename),
-	or will test positions.
+	or with test positions.
 	***************************************************/
 
 	antenna* pos = new antenna[N_ANTENNAS]();		// Locations of antennas
@@ -333,30 +334,14 @@ int main(int argc, char *argv[]){
 	}
 
 	/***********************************
-	 *			TEST SIGNAL			   *
+	 GENERATE TEST SIGNAL			   
+	 Generates the dummy data given a set
+	 of directions. Stores in 
 	 ***********************************/
 
 	#if DEBUG
 		#if GENERATE_TEST_DATA
-			float test_direction;
-			char high, low;
-			for (int direction = 0; direction < N_DIRS; direction++){
-				test_direction = DEG2RAD(-HALF_FOV) + direction*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
-				for (int i = 0; i < N_FREQUENCIES; i++){
-					float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
-					// std::cout << "freq: " << freq << std::endl;
-					float wavelength = C_SPEED/(1E9*freq);
-					for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
-						for (int k = 0; k < N_ANTENNAS; k++){
-
-							high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k].x*sin(test_direction)/wavelength))); //real
-							low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k].x*sin(test_direction)/wavelength))); //imag
-
-							data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
-						}
-					}
-				}
-			}
+			generate_test_data(data);
 		#else
 			/* Generates Bogus data, typically 0x70 */
 			memset(data, BOGUS_DATA, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));

@@ -1,16 +1,18 @@
+#include "beamformer.hh"
 #include "beamformer.cuh"
-
-// nvcc src/beamformer.cu -o bin/beam -lcublas
-
-//sudo dada_db -k baab -d
-// sudo dada_db -k baab -n 8 -b 268435456 -l -p
-//bin/beam -k baab -c 0 -g 0
 
 
 int main(int argc, char *argv[]){
+	#if VERBOSE
+		/* Print Information about all defined variables */
+		print_all_defines();
+	#endif
+
+	/*Look for and select desired GPU type (if it exists) */
+	char prefered_device_name[] = "GeForce GTX 1080";
+	CUDA_select_GPU(prefered_device_name);
 	
-	int gpu = 0;
-	int observation_complete=0;
+	
 
 	/***************************************************
 	DADA VARIABLES
@@ -18,35 +20,60 @@ int main(int argc, char *argv[]){
 	#ifndef DEBUG
 		dada_hdu_t* hdu_in = 0;
 		multilog_t* log = 0;
-		int core = -1;
+		int core = 0;
 		key_t in_key = 0x0000dada;
 		uint64_t header_size = 0;
 	#endif
 
 	/***************************************************
+	Antenna Location & Beam Direction Variables
+	Will be set with a command line option (filename),
+	or with test positions.
+	***************************************************/
+
+	antenna* pos = new antenna[N_ANTENNAS]();		// Locations of antennas
+	beam_direction* dir = new beam_direction[N_BEAMS]();		// Direction of bemformed beams
+
+	bool pos_set = false;
+	bool dir_set = false;
+
+	/***************************************************
 	Parse Command Line Options
 	***************************************************/
-	#ifndef DEBUG
+	
+	#if DEBUG	
+		char legal_commandline_options[] = "g:f:d:h";//{'g','f',':','d',':','h'};
+	#else
+		char legal_commandline_options[] = "c:k:g:f:d:h";//{'c',':','k',':','g',':','f',':','d',':','h'}; //
+	#endif
+
 	int arg = 0;
-	while ((arg=getopt(argc,argv,"c:k:g:h")) != -1) {
+	int gpu = 0;
+	char* file_name = (char *) calloc(256, sizeof(char));
+	while ((arg=getopt(argc, argv, legal_commandline_options)) != -1) {
 		switch (arg) {
-		// to bind to a cpu core
-			case 'c':
-				if (optarg){
-					core = atoi(optarg);
+			#ifndef DEBUG
+				case 'c':
+					/* to bind to a cpu core */
+					if (optarg){
+						core = atoi(optarg);
+						break;
+					} else {
+						printf ("ERROR: -c flag requires argument\n");
+						return EXIT_FAILURE;
+					}
+					
+				case 'k':
+					/* to set the dada key */
+					if (sscanf (optarg, "%x", &in_key) != 1) {
+						fprintf (stderr, "beam: could not parse key from %s\n", optarg);
+						return EXIT_FAILURE;
+					}
 					break;
-				} else {
-					printf ("ERROR: -c flag requires argument\n");
-					return EXIT_FAILURE;
-				}
-				// to set the dada key
-			case 'k':
-				if (sscanf (optarg, "%x", &in_key) != 1) {
-				fprintf (stderr, "dada_db: could not parse key from %s\n", optarg);
-				return EXIT_FAILURE;
-				}
-				break;
+			#endif
+
 			case 'g':
+				/* to set the gpu */
 				if (optarg){
 					gpu = atoi(optarg);
 					break;
@@ -54,12 +81,46 @@ int main(int argc, char *argv[]){
 					printf ("ERROR: -g flag requires argument\n");
 					return EXIT_FAILURE;
 				}
+			
+			case 'f':
+				/* To setup antenna position locations */
+				
+				if (sscanf (optarg, "%s", file_name) != 1) {
+					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
+					return EXIT_FAILURE;
+				}
+				read_in_position_locations(file_name, pos, &pos_set);
+				break;
+
+			case 'd':
+				/* To setup beamforming directions */
+				if (sscanf (optarg, "%s", file_name) != 1) {
+					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
+					return EXIT_FAILURE;
+				}
+				read_in_beam_directions(file_name, dir, &dir_set);
+				break;
+
 			case 'h':
 				usage();
 				return EXIT_SUCCESS;
 		}
 	}
-	#endif
+	free(file_name);
+
+	if (!pos_set){
+		/* Populate location/direction Matricies if they we not set by command-line arguments */
+		for (int i = 0; i < N_ANTENNAS; i++){
+			pos[i].x = i*500.0/(N_ANTENNAS-1) - 250.0;
+		}
+	}
+
+	if (!dir_set){
+		/* Directions for Beamforming if they we not set by command-line arguments */
+		for (int i = 0; i < N_BEAMS; i++){
+			dir[i].theta = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
+		}
+	}
 
 
 
@@ -67,25 +128,7 @@ int main(int argc, char *argv[]){
 	 *			GPU Variables		   *
 	 ***********************************/
 
-	std::cout << "Executing beamformer.cu" << std::endl;
-	print_all_defines();
-
-	char prefered_dev_name[] = "GeForce GTX 1080";
-	int devicesCount;
-	cudaGetDeviceCount(&devicesCount);
-	for(int deviceIndex = 0; deviceIndex < devicesCount; ++deviceIndex)
-	{
-	    cudaDeviceProp deviceProperties;
-	    cudaGetDeviceProperties(&deviceProperties, deviceIndex);
-	    if (prefered_dev_name[14] == deviceProperties.name[14]){
-		    std::cout <<  "Selected: " << deviceProperties.name << std::endl;
-		    std::cout << "letter: " << prefered_dev_name[14] << std::endl;
-		    gpuErrchk(cudaSetDevice(deviceIndex));
-		}
-	}
-
-
-	/* CUBLAS Dimensions */
+	/* CUBLAS matrix dimensions */
 	int A_rows	 = N_BEAMS;
 	int A_cols 	 = N_ANTENNAS;
 	int A_stride = A_rows*A_cols;
@@ -97,9 +140,6 @@ int main(int argc, char *argv[]){
 	int C_stride = C_rows*C_cols;
 	float bw_per_channel = BW_PER_CHANNEL; 
 
-	/***********************************
-	 *			GPU Variables		   *
-	 ***********************************/
 	CxInt8_t *d_A; 				// Weight matrix (N_BEAMS X N_ANTENNAS, for N_FREQUENCIES)
 	CxInt8_t *d_B; 				// Data Matrix (N_ANTENNAS X N_TIMESTEPS_PER_GEMM, for N_FREQUENCIES)
 	char *d_data;				// Raw input data (Before data massaging)
@@ -126,7 +166,7 @@ int main(int argc, char *argv[]){
 	 *			HOST Variables		   *
 	 ***********************************/
 	#if DEBUG
-		char *data = new char[N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS]();
+		char *data = new char[N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS](); // storage for test signals
 		gpuErrchk(cudaHostRegister(data, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
 	#endif
 
@@ -137,57 +177,30 @@ int main(int argc, char *argv[]){
 
 
 	#if DEBUG
-		std::cout << "data size: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS << std::endl;
-		std::ofstream f;
-		f.open("bin/data.py");
-		f << "A = [[";
-		// std::mutex file_mutex;
-
+		/* Vectors of all ones for de-dispersion */
 		float *d_dedispersed;	// Data after being de-dispersed
-		
 		float *out_dedispersed = new float[N_BEAMS*N_DIRS]();
-
 		gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_DIRS*sizeof(float), cudaHostRegisterPortable));
-	#endif
 
-
-
-
-	/***********************************
-	 *		Beamforming Variables	   *
-	 ***********************************/
-	float* pos = new float[N_ANTENNAS];		// Locations of antennas
-	float* dir = new float[N_BEAMS];		// Direction of bemformed beams
-
-	/* Populate location/direction Matricies */
-	for (int i = 0; i < N_ANTENNAS; i++){
-		pos[i] = i*500.0/(N_ANTENNAS-1) - 250.0;
-	}
-
-	/* Directions for Beamforming */
-	for (int i = 0; i < N_BEAMS; i++){
-		dir[i] = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
-	}
-
-	#if DEBUG
-		float *d_vec_ones;		// Vector of all ones for de-dispersion
-		float *vec_ones = new float[N_FREQUENCIES];
-
-		/* Create vector of ones for Dedispersion */
+		float *d_vec_ones;		
+		float *vec_ones = new float[N_FREQUENCIES]; 
 		for (int i = 0; i < N_FREQUENCIES; i++){
 			vec_ones[i] = 1.0;
 		}
 	#endif
 
 
-	/* Fourier Coefficient Matrix */
+	/***********************************
+	 *		Fourier Coefficients 	   *
+	 ***********************************/
+
 	for (int i = 0; i < N_FREQUENCIES; i++){
 		float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*bw_per_channel;
 		float wavelength = C_SPEED/(1E9*freq);
 		for (int j = 0; j < N_ANTENNAS; j++){
 			for (int k = 0; k < N_BEAMS; k++){
-				A[i*A_stride + j*N_BEAMS + k].x = round(MAX_VAL*cos(-2*PI*pos[j]*sin(dir[k])/wavelength));
-				A[i*A_stride + j*N_BEAMS + k].y = round(MAX_VAL*sin(-2*PI*pos[j]*sin(dir[k])/wavelength));
+				A[i*A_stride + j*N_BEAMS + k].x = round(MAX_VAL*cos(-2*PI*pos[j].x*sin(dir[k].theta)/wavelength));
+				A[i*A_stride + j*N_BEAMS + k].y = round(MAX_VAL*sin(-2*PI*pos[j].x*sin(dir[k].theta)/wavelength));
 			}
 		}
 	}
@@ -196,43 +209,54 @@ int main(int argc, char *argv[]){
 	/***********************************
 	 *			Memory Allocation 	   *
 	 ***********************************/
-	gpuErrchk(cudaMalloc(&d_A, 	A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
-	gpuErrchk(cudaMalloc(&d_B, 	N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
-	gpuErrchk(cudaMalloc(&d_C, 	N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
-	gpuErrchk(cudaMalloc(&d_data, N_BYTES_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
-	gpuErrchk(cudaMalloc(&d_out, N_F_PER_DETECT*N_STREAMS * sizeof(float)));			// array for detected, averaged data
+	gpuErrchk(cudaMalloc(&d_A, 		A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
+	gpuErrchk(cudaMalloc(&d_B, 		N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
+	gpuErrchk(cudaMalloc(&d_C, 		N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
+	gpuErrchk(cudaMalloc(&d_data, 	N_BYTES_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
+	gpuErrchk(cudaMalloc(&d_out, 	N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
 
-	/* Cublas Constant Memory */
+	/* Cublas Constants */
 	gpuErrchk(cudaMalloc(&d_inv_max_value, sizeof(cuComplex)));
 	gpuErrchk(cudaMalloc(&d_zero, sizeof(cuComplex)));
 	
-
-
 	#if DEBUG
-		gpuErrchk(cudaMalloc(&d_vec_ones, N_FREQUENCIES*sizeof(float)));
-		gpuErrchk(cudaMalloc(&d_f_one, sizeof(float)));
-		gpuErrchk(cudaMalloc(&d_f_zero, sizeof(float)));
+		gpuErrchk(cudaMalloc(&d_vec_ones, 	N_FREQUENCIES*sizeof(float)));
+		gpuErrchk(cudaMalloc(&d_f_one, 		sizeof(float)));
+		gpuErrchk(cudaMalloc(&d_f_zero, 	sizeof(float)));
 		gpuErrchk(cudaMalloc(&d_dedispersed, N_BEAMS*N_STREAMS*sizeof(float)));						// array for frequency averaged data
-		
 	#endif
 
-	/* Copy constants to memory */
+	/***********************************
+	 *			Memory Copies	 	   *
+	 ***********************************/
+
 	gpuErrchk(cudaMemcpy(d_A, A, A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice));
 	gpuErrchk(cudaMemcpy(d_inv_max_value, &h_inv_max_value, sizeof(cuComplex), cudaMemcpyHostToDevice));
 	gpuErrchk(cudaMemcpy(d_zero, &h_zero, sizeof(cuComplex), cudaMemcpyHostToDevice));
-	
-
 
 	#if DEBUG
 		gpuErrchk(cudaMemcpy(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice));
 		gpuErrchk(cudaMemcpy(d_f_one, &h_f_one, sizeof(float), cudaMemcpyHostToDevice));
 		gpuErrchk(cudaMemcpy(d_f_zero, &h_f_zero, sizeof(float), cudaMemcpyHostToDevice));
-		std::cout << "First: " << h_f_zero << " and " << h_f_one << std::endl;
+		std::cout << "Host-side zero: " << h_f_zero << " and host-side one" << h_f_one << std::endl;
+		std::cout << "GPU-side one & zero:" << std::endl;
 		print_data_scalar<<<1, 1>>>(d_f_one);
 		print_data_scalar<<<1, 1>>>(d_f_zero);
 	#endif
 
-	// gpuErrchk(cudaMemset(d_dedispersed, 0, N_BEAMS*N_STREAMS*sizeof(float)));
+	/***********************************
+	 *  Memory Initialization (memset) *
+	 ***********************************/
+
+	/* Zero out GPU memory with cudaMemset (this is helpful when the number of antennas != N_ANTENNAS) */
+	gpuErrchk(cudaMemset(&d_B, 0,  	N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
+	gpuErrchk(cudaMemset(&d_C, 0,  	N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
+	gpuErrchk(cudaMemset(&d_data, 0,  N_BYTES_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
+	gpuErrchk(cudaMemset(&d_out, 0,  N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
+
+	#if DEBUG
+		gpuErrchk(cudaMemset(d_dedispersed, 0, N_BEAMS*N_STREAMS*sizeof(float)));
+	#endif
 
 	/***********************************
 	 *		Concurrency Handles		   *
@@ -271,34 +295,18 @@ int main(int argc, char *argv[]){
 
 	for (int i = 0; i < 5*N_BLOCKS_on_GPU; i++){
 		gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[i], cudaEventDisableTiming));
-		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[i], cudaEventDisableTiming));
+		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[i],    cudaEventDisableTiming));
 	}
 
 	/***********************************
-	 *			TEST SIGNAL			   *
+	 GENERATE TEST SIGNAL			   
+	 Generates the dummy data given a set
+	 of directions. Stores in 
 	 ***********************************/
 
 	#if DEBUG
 		#if GENERATE_TEST_DATA
-			float test_direction;
-			char high, low;
-			for (int iii = 0; iii < N_DIRS; iii++){
-				test_direction = DEG2RAD(-HALF_FOV) + iii*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
-				for (int i = 0; i < N_FREQUENCIES; i++){
-					float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
-					// std::cout << "freq: " << freq << std::endl;
-					float wavelength = C_SPEED/(1E9*freq);
-					for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
-						for (int k = 0; k < N_ANTENNAS; k++){
-
-							high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k]*sin(test_direction)/wavelength))); //real
-							low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k]*sin(test_direction)/wavelength))); //imag
-
-							data[iii*N_BYTES_PRE_EXPANSION_PER_GEMM + i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
-						}
-					}
-				}
-			}
+			generate_test_data(data, pos, gpu, B_stride);
 		#else
 			/* Generates Bogus data, typically 0x70 */
 			memset(data, BOGUS_DATA, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));
@@ -306,9 +314,6 @@ int main(int argc, char *argv[]){
 		#endif
 	#endif 
 
-	// std::cout << "done writing data" << std::endl;
-
-	// int observation_complete = 0;
 	uint64_t blocks_analyzed = 0;
 	uint64_t blocks_transferred = 0;
 	uint64_t blocks_analysis_queue = 0;
@@ -364,8 +369,8 @@ int main(int argc, char *argv[]){
 	Deal with Headers (FOR DADA)
 	***************************************************/
 	#ifndef DEBUG
-		// read the headers from the input HDU and mark as cleared
-		// will block until header is present in dada ring buffer
+		/* read the headers from the input HDU and mark as cleared
+		   will block until header is present in dada ring buffer */
 		char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
 		if (!header_in)
 		{
@@ -395,12 +400,20 @@ int main(int argc, char *argv[]){
 
 
 
-int transfer_separation = 2;
-int total_separation = 4;
 
-/*********************************************************************************
-						START OBSERVATION LOOP
-*********************************************************************************/
+
+	/*********************************************************************************
+	START OBSERVATION LOOP
+	*********************************************************************************/
+	int observation_complete = 0;
+	std::cout << "Executing beamformer.cu" << "\n";
+	std::cout << "MAX_TOTAL_SEP: "<< MAX_TOTAL_SEP << "\n";
+	std::cout << "MAX_TRANSFER_SEP: "<< MAX_TRANSFER_SEP << std::endl;
+
+	#if DEBUG
+		START_TIMER();
+	#endif
+
 	while (!observation_complete){
 		
 		#if VERBOSE
@@ -415,7 +428,7 @@ int total_separation = 4;
 		**************************************************/
 
 		/* Data is copied iff the analysis steps and transfer rates are keeping up */
-		if ((blocks_transfer_queue - blocks_analyzed < total_separation) && (blocks_transfer_queue - blocks_transferred < transfer_separation)){
+		if ((blocks_transfer_queue - blocks_analyzed < MAX_TOTAL_SEP) && (blocks_transfer_queue - blocks_transferred < MAX_TRANSFER_SEP)){
 
 			#if DEBUG
 				/***********************************
@@ -594,40 +607,58 @@ int total_separation = 4;
 		}
 	} // end while (!observation_complete)
 
+	#if DEBUG
+		float observation_time_ms;
+		STOP_RECORD_TIMER(observation_time_ms);
+		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
+		std::cout << "Code produced outputs for " << N_DIRS*N_OUTPUTS_PER_GEMM << " data chunks.\n";
+		std::cout << "Time per data chunk: " << observation_time_ms/N_DIRS*N_OUTPUTS_PER_GEMM << " milliseconds.\n";
+		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS/observation_time_ms/1e6 << "GB/s" << std::endl;
+	#endif
+
 
 	for (int st = 0; st < N_STREAMS; st++){
 		gpuErrchk(cudaStreamSynchronize(stream[st]));
 	}
 	std::cout << "Synchronized" << std::endl;
 
+
+
+
+	#if DEBUG
+		char filename[] = "bin/data.py";
+		write_array_to_disk_as_python_file(out_dedispersed, N_DIRS, N_BEAMS, filename);
+		/* Export debug data to a python file. */
+
+		// std::ofstream f; // File for data output
+		// f.open("bin/data.py"); // written such that it can be imported into any python file
+		// f << "A = [[";
+		
+		// for (int jj = 0; jj < N_DIRS; jj++){
+		// 	for (int ii = 0; ii < N_BEAMS; ii++){
+		// 		f << out_dedispersed[jj*N_BEAMS + ii];
+		// 		// std::cout << out_dedispersed[jj*N_BEAMS + ii] << ", ";
+		// 		if (ii != N_BEAMS - 1){
+		// 			f << ",";
+		// 		}
+		// 	}
+
+		// 	if (jj != N_DIRS-1){
+		// 		f << "],\n[";
+		// 	} else {
+		// 		f<< "]]"<<std::endl;
+		// 	}
+		// }
+
+		// f.close();
+	#endif
+
+	std::cout << "Freeing CUDA Structures" << std::endl;
+
 	for (int event = 0; event < 5*N_BLOCKS_on_GPU; event++){
 		gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event]));
 		gpuErrchk(cudaEventDestroy(BlockTransferredSync[event]));
 	}
-
-
-	#if DEBUG
-		/* Export debug data to a python file. */
-		for (int jj = 0; jj < N_DIRS; jj++){
-			for (int ii = 0; ii < N_BEAMS; ii++){
-				f << out_dedispersed[jj*N_BEAMS + ii];
-				// std::cout << out_dedispersed[jj*N_BEAMS + ii] << ", ";
-				if (ii != N_BEAMS - 1){
-					f << ",";
-				}
-			}
-
-			if (jj != N_DIRS-1){
-				f << "],\n[";
-			} else {
-				f<< "]]"<<std::endl;
-			}
-		}
-
-		f.close();
-	#endif
-
-	std::cout << "Freeing Structures" << std::endl;
 
 	for (int i = 0; i < N_STREAMS; i++){
 		gpuErrchk(cudaStreamDestroy(stream[i]));
@@ -637,8 +668,8 @@ int total_separation = 4;
 	std::cout << "Freed cuda streams and handles" << std::endl;
 
 	gpuErrchk(cudaFree(d_A));
-	gpuErrchk(cudaFree(d_C));
 	gpuErrchk(cudaFree(d_B));
+	gpuErrchk(cudaFree(d_C));
 	gpuErrchk(cudaFree(d_data));
 	gpuErrchk(cudaFree(d_out));
 	gpuErrchk(cudaFree(d_inv_max_value));
@@ -654,7 +685,7 @@ int total_separation = 4;
 
 	std::cout << "Freed GPU memory" << std::endl;
 
-	// gpuErrchk(cudaHostUnregister(data));
+	
 	gpuErrchk(cudaHostUnregister(beam_out));
 
 	delete[] A;
@@ -663,9 +694,11 @@ int total_separation = 4;
 	delete[] beam_out;
 
 	#if DEBUG
+		gpuErrchk(cudaHostUnregister(data));
+		gpuErrchk(cudaHostUnregister(out_dedispersed));
+
 		delete[] data;
 		delete[] vec_ones;
-		gpuErrchk(cudaHostUnregister(out_dedispersed));
 		delete[] out_dedispersed;
 	#endif
 

@@ -11,6 +11,7 @@
 #include <cmath>
 #include <fstream>
 #include <cstdint>
+#include <unistd.h> //optarg
 
 
 
@@ -20,7 +21,6 @@
 	#include <stdlib.h>
 	#include <math.h>
 	#include <string.h>
-	#include <unistd.h>
 	#include <netdb.h>
 	#include <sys/socket.h>
 	#include <sys/types.h>
@@ -260,11 +260,6 @@ int read_in_beam_directions(char * file_name, beam_direction* dir, bool * dir_se
 
 int read_in_position_locations(char * file_name, antenna *pos, bool *pos_set){
 	std::ifstream input_file;
-	char* file_name = (char *) calloc(256, sizeof(char));
-	if (sscanf (optarg, "%s", file_name) != 1) {
-		fprintf (stderr, "beam: could not parse position file from %s\n", optarg);
-		return EXIT_FAILURE;
-	}
 	input_file.open(file_name);
 	int nant;
 	input_file >> nant;

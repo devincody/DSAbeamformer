@@ -216,11 +216,13 @@ void dsaX_dbgpu_cleanup (dada_hdu_t * in,  multilog_t * log) {
 				UTILITY FUNCTIONS
 ***************************************************/
 
+#if DEBUG
 void generate_test_data(char *data, antenna pos[], int gpu, int stride){
 	float test_direction;
 	char high, low;
-	for (int direction = 0; direction < N_DIRS; direction++){
-		test_direction = DEG2RAD(-HALF_FOV) + direction*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
+	
+	for (long direction = 0; direction < N_DIRS; direction++){
+		test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
 		for (int i = 0; i < N_FREQUENCIES; i++){
 			float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
 			// std::cout << "freq: " << freq << std::endl;
@@ -237,6 +239,7 @@ void generate_test_data(char *data, antenna pos[], int gpu, int stride){
 		}
 	}
 }
+#endif
 
 int read_in_beam_directions(char * file_name, beam_direction* dir, bool * dir_set){
 	std::ifstream input_file;

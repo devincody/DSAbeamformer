@@ -612,7 +612,7 @@ int main(int argc, char *argv[]){
 		STOP_RECORD_TIMER(observation_time_ms);
 		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 		std::cout << "Code produced outputs for " << N_DIRS*N_OUTPUTS_PER_GEMM << " data chunks.\n";
-		std::cout << "Time per data chunk: " << observation_time_ms/N_DIRS*N_OUTPUTS_PER_GEMM << " milliseconds.\n";
+		std::cout << "Time per data chunk: " << observation_time_ms/(N_DIRS*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
 		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS/observation_time_ms/1e6 << "GB/s" << std::endl;
 	#endif
 

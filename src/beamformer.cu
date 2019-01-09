@@ -249,10 +249,10 @@ int main(int argc, char *argv[]){
 	 ***********************************/
 
 	/* Zero out GPU memory with cudaMemset (this is helpful when the number of antennas != N_ANTENNAS) */
-	gpuErrchk(cudaMemset(&d_B, 0,  	N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
-	gpuErrchk(cudaMemset(&d_C, 0,  	N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
-	gpuErrchk(cudaMemset(&d_data, 0,  N_BYTES_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
-	gpuErrchk(cudaMemset(&d_out, 0,  N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
+	gpuErrchk(cudaMemset(d_B, 0,  	N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
+	gpuErrchk(cudaMemset(d_C, 0,  	N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
+	gpuErrchk(cudaMemset(d_data, 0,  N_BYTES_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
+	gpuErrchk(cudaMemset(d_out, 0,  N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
 
 	#if DEBUG
 		gpuErrchk(cudaMemset(d_dedispersed, 0, N_BEAMS*N_STREAMS*sizeof(float)));

@@ -13,10 +13,13 @@ all: beam
 
 debug: CXXFLAGS += -DDEBUG=1 -g -lineinfo -DVERBOSE
 
-verbose: CXXFLAGS += -DVERBOSE
+verbose: CXXFLAGS += -DVERBOSE -lpsrdada
 
 debug: beam
 verbose: beam
+
+junk: 
+	dada_junkdb -c 0 -z -k baab -r 4000 -t 10 lib/correlator_header_dsaX.txt
 
 beam: $(SRCDIR)/beamformer.cu
 	$(CC) -o $(BINDIR)/$@ $^ -I$(DADA_INCLUDE) -L$(DADA_LIB) $(CXXFLAGS) $(NVFLAGS)

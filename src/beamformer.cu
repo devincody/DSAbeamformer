@@ -9,7 +9,8 @@ int main(int argc, char *argv[]){
 	#endif
 
 	/*Look for and select desired GPU type (if it exists) */
-	CUDA_select_GPU("GeForce GTX 1080");
+	char prefered_device_name[] = "GeForce GTX 1080";
+	CUDA_select_GPU(prefered_device_name);
 	
 	
 

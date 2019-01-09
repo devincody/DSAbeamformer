@@ -6,7 +6,14 @@
 
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
+#include <stdio.h> // needed for printf() which can be called from GPU
 
+
+
+
+/***********************************
+ *			Error Checking		   *
+ ***********************************/
 
 /* Helper Macro for gpu error checking */
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
@@ -28,6 +35,10 @@ void gpuBLASchk(int errval){
 	}
 }
 
+/***********************************
+ *			Timing Functions	   *
+ ***********************************/
+
 /* Variables and Functions for timing analysis */
 cudaEvent_t start;
 cudaEvent_t stop;
@@ -45,6 +56,8 @@ cudaEvent_t stop;
 	gpuErrchk(cudaEventDestroy(start));                   \
 	gpuErrchk(cudaEventDestroy(stop));                    \
 }
+
+
 
 
 /***********************************
@@ -157,10 +170,14 @@ void print_data_scalar(float* data){
 
 
 
-void CUDA_select_GPU(char * prefered_dev_name){
-	/***********************************
-	 GPU Card selection			   
-	 ***********************************/
+void CUDA_select_GPU(char * prefered_device_name){
+	/*
+
+	 Code iterates through a list of available gpus provided by the system,
+	 compares them to the given "prefered device name" variable and then 
+	 selects the first one that matches.  
+	
+	*/
 	int devicesCount;
 	cudaGetDeviceCount(&devicesCount);
 	for(int deviceIndex = 0; deviceIndex < devicesCount; ++deviceIndex)
@@ -168,9 +185,10 @@ void CUDA_select_GPU(char * prefered_dev_name){
 	    cudaDeviceProp deviceProperties;
 	    cudaGetDeviceProperties(&deviceProperties, deviceIndex);
 
-	    if (!strcmp(prefered_dev_name, deviceProperties.name)){
+	    if (!strcmp(prefered_device_name, deviceProperties.name)){
 		    std::cout <<  "Selected: " << deviceProperties.name << std::endl;
 		    gpuErrchk(cudaSetDevice(deviceIndex));
+		    break;
 		}
 	}
 }

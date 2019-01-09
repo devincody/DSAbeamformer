@@ -82,12 +82,16 @@ int main(int argc, char *argv[]){
 
 			case 'f':
 				/* To setup antenna position locations */
-				read_in_position_locations(pos, &pos_set);
+				if (read_in_position_locations(pos, &pos_set) == EXIT_FAILURE){
+					return EXIT_FAILURE;
+				}
 				break;
 
 			case 'd':
 				/* To setup beamforming directions */
-				read_in_beam_directions(dir, &dir_set);
+				if (read_in_beam_directions(dir, &dir_set) == EXIT_FAILURE){
+					return EXIT_FAILURE;
+				}
 				break;
 
 			case 'h':
@@ -95,7 +99,6 @@ int main(int argc, char *argv[]){
 				return EXIT_SUCCESS;
 		}
 	}
-	free(file_name);
 
 	if (!pos_set){
 		/* Populate location/direction Matricies if they we not set by command-line arguments */
@@ -295,7 +298,7 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		#if GENERATE_TEST_DATA
-			generate_test_data(data);
+			generate_test_data(data, pos, gpu, B_stride);
 		#else
 			/* Generates Bogus data, typically 0x70 */
 			memset(data, BOGUS_DATA, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));
@@ -402,6 +405,7 @@ int main(int argc, char *argv[]){
 	#if DEBUG
 		START_TIMER();
 	#endif
+		
 	while (!observation_complete){
 		
 		#if VERBOSE
@@ -610,10 +614,7 @@ int main(int argc, char *argv[]){
 	}
 	std::cout << "Synchronized" << std::endl;
 
-	for (int event = 0; event < 5*N_BLOCKS_on_GPU; event++){
-		gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event]));
-		gpuErrchk(cudaEventDestroy(BlockTransferredSync[event]));
-	}
+
 
 
 	#if DEBUG
@@ -643,7 +644,12 @@ int main(int argc, char *argv[]){
 		// f.close();
 	#endif
 
-	std::cout << "Freeing Structures" << std::endl;
+	std::cout << "Freeing CUDA Structures" << std::endl;
+
+	for (int event = 0; event < 5*N_BLOCKS_on_GPU; event++){
+		gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event]));
+		gpuErrchk(cudaEventDestroy(BlockTransferredSync[event]));
+	}
 
 	for (int i = 0; i < N_STREAMS; i++){
 		gpuErrchk(cudaStreamDestroy(stream[i]));
@@ -653,8 +659,8 @@ int main(int argc, char *argv[]){
 	std::cout << "Freed cuda streams and handles" << std::endl;
 
 	gpuErrchk(cudaFree(d_A));
-	gpuErrchk(cudaFree(d_C));
 	gpuErrchk(cudaFree(d_B));
+	gpuErrchk(cudaFree(d_C));
 	gpuErrchk(cudaFree(d_data));
 	gpuErrchk(cudaFree(d_out));
 	gpuErrchk(cudaFree(d_inv_max_value));
@@ -670,7 +676,7 @@ int main(int argc, char *argv[]){
 
 	std::cout << "Freed GPU memory" << std::endl;
 
-	// gpuErrchk(cudaHostUnregister(data));
+	
 	gpuErrchk(cudaHostUnregister(beam_out));
 
 	delete[] A;
@@ -679,9 +685,11 @@ int main(int argc, char *argv[]){
 	delete[] beam_out;
 
 	#if DEBUG
+		gpuErrchk(cudaHostUnregister(data));
+		gpuErrchk(cudaHostUnregister(out_dedispersed));
+
 		delete[] data;
 		delete[] vec_ones;
-		gpuErrchk(cudaHostUnregister(out_dedispersed));
 		delete[] out_dedispersed;
 	#endif
 

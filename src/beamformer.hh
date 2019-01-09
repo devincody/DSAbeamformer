@@ -8,8 +8,6 @@
 #include <sstream>
 #include <iomanip>
 #include <string>
-#include <stdio.h>
-
 #include <cmath>
 #include <fstream>
 #include <cstdint>
@@ -204,7 +202,7 @@ void dsaX_dbgpu_cleanup (dada_hdu_t * in,  multilog_t * log) {
 				UTILITY FUNCTIONS
 ***************************************************/
 
-void generate_test_data(char *data){
+void generate_test_data(char *data, antenna pos[], int gpu, int stride){
 	float test_direction;
 	char high, low;
 	for (int direction = 0; direction < N_DIRS; direction++){
@@ -219,14 +217,14 @@ void generate_test_data(char *data){
 					high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k].x*sin(test_direction)/wavelength))); //real
 					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k].x*sin(test_direction)/wavelength))); //imag
 
-					data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
+					data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 				}
 			}
 		}
 	}
 }
 
-void read_in_beam_directions(beam_direction* dir, bool * dir_set){
+int read_in_beam_directions(beam_direction* dir, bool * dir_set){
 	char* file_name = (char *) calloc(256, sizeof(char));
 	if (sscanf (optarg, "%s", file_name) != 1) {
 		fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
@@ -245,10 +243,12 @@ void read_in_beam_directions(beam_direction* dir, bool * dir_set){
 		std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
 	}
 	*dir_set = true;
+	free(file_name);
 }
 
 
-void read_in_position_locations(antenna *pos, bool *pos_set){
+int read_in_position_locations(antenna *pos, bool *pos_set){
+	char* file_name = (char *) calloc(256, sizeof(char));
 	if (sscanf (optarg, "%s", file_name) != 1) {
 		fprintf (stderr, "beam: could not parse position file from %s\n", optarg);
 		return EXIT_FAILURE;
@@ -265,7 +265,8 @@ void read_in_position_locations(antenna *pos, bool *pos_set){
 		input_file >> pos[ant].x >> pos[ant].y >> pos[ant].z;
 		std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
 	}
-	pos_set = true;
+	*pos_set = true;
+	free(file_name);
 }
 
 

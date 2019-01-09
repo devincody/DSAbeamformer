@@ -177,17 +177,31 @@ public:
 				DADA
 ***************************************************/
 
-#ifndef DEBUG
+
 /* Usage as defined by dada example code */
-void usage()
-{
-  fprintf (stdout,
-	   "dsaX_imager [options]\n"
-	   " -c core   bind process to CPU core\n"
-	   " -k key [default dada]\n"
+#if DEBUG
+void usage(){
+	fprintf (stdout,
+	   "dsaX_beamformer [options]\n"
+	   " -g gpu 	select a predefined frequency range\n"
+	   " -f position_filename   file where the antenna positions are stored\n"
+	   " -d direction_filename file where the beam directions are stored\n"
 	   " -h        print usage\n");
 }
+#else
+void usage(){
+	fprintf (stdout,
+	   "dsaX_beamformer [options]\n"
+	   " -c core   bind process to CPU core\n"
+	   " -k key [default dada]\n"
+	   " -g gpu 	select a predefined frequency range\n"
+	   " -f position_filename   file where the antenna positions are stored\n"
+	   " -d direction_filename file where the beam directions are stored\n"
+	   " -h        print usage\n");
+}
+#endif
 
+#ifndef DEBUG
 /*cleanup as defined by dada example code */
 void dsaX_dbgpu_cleanup (dada_hdu_t * in,  multilog_t * log) {
 	if (dada_hdu_unlock_read (in) < 0){
@@ -224,13 +238,9 @@ void generate_test_data(char *data, antenna pos[], int gpu, int stride){
 	}
 }
 
-int read_in_beam_directions(beam_direction* dir, bool * dir_set){
+int read_in_beam_directions(char * file_name, beam_direction* dir, bool * dir_set){
 	std::ifstream input_file;
-	char* file_name = (char *) calloc(256, sizeof(char));
-	if (sscanf (optarg, "%s", file_name) != 1) {
-		fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
-		return EXIT_FAILURE;
-	}
+
 	input_file.open(file_name);
 	int nbeam;
 	input_file >> nbeam;
@@ -244,12 +254,11 @@ int read_in_beam_directions(beam_direction* dir, bool * dir_set){
 		std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
 	}
 	*dir_set = true;
-	free(file_name);
 	return 0;
 }
 
 
-int read_in_position_locations(antenna *pos, bool *pos_set){
+int read_in_position_locations(char * file_name, antenna *pos, bool *pos_set){
 	std::ifstream input_file;
 	char* file_name = (char *) calloc(256, sizeof(char));
 	if (sscanf (optarg, "%s", file_name) != 1) {
@@ -269,7 +278,6 @@ int read_in_position_locations(antenna *pos, bool *pos_set){
 		std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
 	}
 	*pos_set = true;
-	free(file_name);
 	return 0;
 }
 

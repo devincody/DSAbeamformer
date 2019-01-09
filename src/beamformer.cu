@@ -42,13 +42,14 @@ int main(int argc, char *argv[]){
 	***************************************************/
 	
 	#if DEBUG	
-		char legal_commandline_options[] = {'f',':','d',':','h'};
+		char legal_commandline_options[] = "g:f:d:h";//{'g','f',':','d',':','h'};
 	#else
-		char legal_commandline_options[] = {'c',':','k',':','g',':','f',':','d',':','h'}; //"c:k:g:f:d:h"
+		char legal_commandline_options[] = "c:k:g:f:d:h";//{'c',':','k',':','g',':','f',':','d',':','h'}; //
 	#endif
 
 	int arg = 0;
 	int gpu = 0;
+	char* file_name = (char *) calloc(256, sizeof(char));
 	while ((arg=getopt(argc, argv, legal_commandline_options)) != -1) {
 		switch (arg) {
 			#ifndef DEBUG
@@ -69,29 +70,35 @@ int main(int argc, char *argv[]){
 						return EXIT_FAILURE;
 					}
 					break;
-				case 'g':
-					/* to set the gpu */
-					if (optarg){
-						gpu = atoi(optarg);
-						break;
-					} else {
-						printf ("ERROR: -g flag requires argument\n");
-						return EXIT_FAILURE;
-					}
 			#endif
 
-			case 'f':
-				/* To setup antenna position locations */
-				if (read_in_position_locations(pos, &pos_set) == EXIT_FAILURE){
+			case 'g':
+				/* to set the gpu */
+				if (optarg){
+					gpu = atoi(optarg);
+					break;
+				} else {
+					printf ("ERROR: -g flag requires argument\n");
 					return EXIT_FAILURE;
 				}
+			
+			case 'f':
+				/* To setup antenna position locations */
+				
+				if (sscanf (optarg, "%s", file_name) != 1) {
+					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
+					return EXIT_FAILURE;
+				}
+				read_in_position_locations(file_name, pos, &pos_set);
 				break;
 
 			case 'd':
 				/* To setup beamforming directions */
-				if (read_in_beam_directions(dir, &dir_set) == EXIT_FAILURE){
+				if (sscanf (optarg, "%s", file_name) != 1) {
+					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
+				read_in_beam_directions(file_name, dir, &dir_set);
 				break;
 
 			case 'h':
@@ -99,6 +106,7 @@ int main(int argc, char *argv[]){
 				return EXIT_SUCCESS;
 		}
 	}
+	free(file_name);
 
 	if (!pos_set){
 		/* Populate location/direction Matricies if they we not set by command-line arguments */
@@ -604,7 +612,7 @@ int main(int argc, char *argv[]){
 		STOP_RECORD_TIMER(observation_time_ms);
 		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 		std::cout << "Code produced outputs for " << N_DIRS*N_OUTPUTS_PER_GEMM << " data chunks.\n";
-		std::cout << "Time per data chunk: " << observation_time_ms/N_DIRS*N_OUTPUTS_PER_GEMM << " milliseconds.\n"
+		std::cout << "Time per data chunk: " << observation_time_ms/N_DIRS*N_OUTPUTS_PER_GEMM << " milliseconds.\n";
 		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS/observation_time_ms/1e6 << "GB/s" << std::endl;
 	#endif
 
@@ -618,7 +626,8 @@ int main(int argc, char *argv[]){
 
 
 	#if DEBUG
-		write_array_to_disk_as_python_file(out_dedispersed, N_DIRS, N_BEAMS, "bin/data.py");
+		char filename[] = "bin/data.py";
+		write_array_to_disk_as_python_file(out_dedispersed, N_DIRS, N_BEAMS, filename);
 		/* Export debug data to a python file. */
 
 		// std::ofstream f; // File for data output

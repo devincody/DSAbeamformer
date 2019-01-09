@@ -137,8 +137,8 @@
 // Solving Constants
 #define N_STREAMS 8
 #define N_DIRS  1024
-#define MAX_TRANSFER_SEP = 2;
-#define MAX_TOTAL_SEP = 4;
+#define MAX_TRANSFER_SEP 2;
+#define MAX_TOTAL_SEP 4;
 
 
 /***************************************************
@@ -225,6 +225,7 @@ void generate_test_data(char *data, antenna pos[], int gpu, int stride){
 }
 
 int read_in_beam_directions(beam_direction* dir, bool * dir_set){
+	std::ifstream input_file;
 	char* file_name = (char *) calloc(256, sizeof(char));
 	if (sscanf (optarg, "%s", file_name) != 1) {
 		fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
@@ -244,10 +245,12 @@ int read_in_beam_directions(beam_direction* dir, bool * dir_set){
 	}
 	*dir_set = true;
 	free(file_name);
+	return 0;
 }
 
 
 int read_in_position_locations(antenna *pos, bool *pos_set){
+	std::ifstream input_file;
 	char* file_name = (char *) calloc(256, sizeof(char));
 	if (sscanf (optarg, "%s", file_name) != 1) {
 		fprintf (stderr, "beam: could not parse position file from %s\n", optarg);
@@ -267,6 +270,7 @@ int read_in_position_locations(antenna *pos, bool *pos_set){
 	}
 	*pos_set = true;
 	free(file_name);
+	return 0;
 }
 
 

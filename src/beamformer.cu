@@ -40,7 +40,6 @@ int main(int argc, char *argv[]){
 	Parse Command Line Options
 	***************************************************/
 	
-	std::ifstream input_file;
 	#if DEBUG	
 		char legal_commandline_options[] = {'f',':','d',':','h'};
 	#else
@@ -405,7 +404,7 @@ int main(int argc, char *argv[]){
 	#if DEBUG
 		START_TIMER();
 	#endif
-		
+
 	while (!observation_complete){
 		
 		#if VERBOSE

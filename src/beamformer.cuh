@@ -170,7 +170,7 @@ void print_data_scalar(float* data){
 
 
 
-void CUDA_select_GPU(char * prefered_device_name){
+void CUDA_select_GPU(std::string prefered_device_name){
 	/*
 
 	 Code iterates through a list of available gpus provided by the system,

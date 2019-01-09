@@ -226,6 +226,74 @@ void generate_test_data(char *data){
 	}
 }
 
+void read_in_beam_directions(beam_direction* dir, bool * dir_set){
+	char* file_name = (char *) calloc(256, sizeof(char));
+	if (sscanf (optarg, "%s", file_name) != 1) {
+		fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
+		return EXIT_FAILURE;
+	}
+	input_file.open(file_name);
+	int nbeam;
+	input_file >> nbeam;
+	if (nbeam != N_BEAMS){
+		std::cout << "Number of beams in file (" << nbeam << ") does not match N_BEAMS ("<< N_BEAMS << ")" <<std::endl;
+		std::cout << "Excess beams will be ignored, missing beams will be set to 0." << std::endl;
+	}
+
+	for (int beam_idx = 0; beam_idx < N_BEAMS; beam_idx++){
+		input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
+		std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
+	}
+	*dir_set = true;
+}
+
+
+void read_in_position_locations(antenna *pos, bool *pos_set){
+	if (sscanf (optarg, "%s", file_name) != 1) {
+		fprintf (stderr, "beam: could not parse position file from %s\n", optarg);
+		return EXIT_FAILURE;
+	}
+	input_file.open(file_name);
+	int nant;
+	input_file >> nant;
+	if (nant != N_ANTENNAS){
+		std::cout << "Number of antennas in file (" << nant << ") does not match N_ANTENNAS ("<< N_ANTENNAS << ")" <<std::endl;
+		std::cout << "Excess antennas will be ignored, missing antennas will be set to 0." << std::endl;
+	}
+
+	for (int ant = 0; ant < N_ANTENNAS; ant++){
+		input_file >> pos[ant].x >> pos[ant].y >> pos[ant].z;
+		std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
+	}
+	pos_set = true;
+}
+
+
+void write_array_to_disk_as_python_file(float *data_out, int rows, int cols, char * output_filename){
+	/* Export debug data to a python file. */
+
+	std::ofstream f; // File for data output
+	f.open(output_filename); // written such that it can be imported into any python file
+	f << "A = [[";
+	
+	for (int jj = 0; jj < rows; jj++){
+		for (int ii = 0; ii < cols; ii++){
+			f << data_out[jj*cols + ii];
+			// std::cout << data_out[jj*cols + ii] << ", ";
+			if (ii != cols - 1){
+				f << ",";
+			}
+		}
+
+		if (jj != rows-1){
+			f << "],\n[";
+		} else {
+			f<< "]]"<<std::endl;
+		}
+	}
+
+	f.close();
+}
 
 
 void print_all_defines(void){

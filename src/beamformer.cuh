@@ -157,7 +157,23 @@ void print_data_scalar(float* data){
 
 
 
+void CUDA_select_GPU(char * prefered_dev_name){
+	/***********************************
+	 GPU Card selection			   
+	 ***********************************/
+	int devicesCount;
+	cudaGetDeviceCount(&devicesCount);
+	for(int deviceIndex = 0; deviceIndex < devicesCount; ++deviceIndex)
+	{
+	    cudaDeviceProp deviceProperties;
+	    cudaGetDeviceProperties(&deviceProperties, deviceIndex);
 
+	    if (!strcmp(prefered_dev_name, deviceProperties.name)){
+		    std::cout <<  "Selected: " << deviceProperties.name << std::endl;
+		    gpuErrchk(cudaSetDevice(deviceIndex));
+		}
+	}
+}
 
 
 

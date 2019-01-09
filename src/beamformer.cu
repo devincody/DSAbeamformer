@@ -2,6 +2,10 @@
 
 
 int main(int argc, char *argv[]){
+	#if VERBOSE
+		/* Print Information about all defined variables */
+		print_all_defines();
+	#endif
 	
 	int gpu = 0;
 	int observation_complete=0;
@@ -19,6 +23,8 @@ int main(int argc, char *argv[]){
 
 	/***************************************************
 	Antenna Location & Beam Direction Variables
+	Will be set with a command line option (filename),
+	or will test positions.
 	***************************************************/
 
 	antenna* pos = new antenna[N_ANTENNAS]();		// Locations of antennas
@@ -30,19 +36,19 @@ int main(int argc, char *argv[]){
 	/***************************************************
 	Parse Command Line Options
 	***************************************************/
-	int arg = 0;
+	
 	std::ifstream input_file;
 	char* file_name = (char *) calloc(256,sizeof(char));
 	#if DEBUG	
 		char legal_commandline_options[] = {'f',':','d',':','h'};
 	#else
-		char legal_commandline_options[] = {'c',':','k',':','g',':','f',':','d',':','h'};
-		//"c:k:g:f:d:h"
+		char legal_commandline_options[] = {'c',':','k',':','g',':','f',':','d',':','h'}; //"c:k:g:f:d:h"
 	#endif
 
+	int arg = 0;
 	while ((arg=getopt(argc, argv, legal_commandline_options)) != -1) {
 		switch (arg) {
-			#ifndef
+			#ifndef DEBUG
 				case 'c':
 					/* to bind to a cpu core */
 					if (optarg){
@@ -123,26 +129,25 @@ int main(int argc, char *argv[]){
 	free(file_name);
 
 	if (!pos_set){
-		/* Populate location/direction Matricies */
+		/* Populate location/direction Matricies if they we not set by command-line arguments */
 		for (int i = 0; i < N_ANTENNAS; i++){
 			pos[i].x = i*500.0/(N_ANTENNAS-1) - 250.0;
 		}
 	}
 
 	if (!dir_set){
-		/* Directions for Beamforming */
+		/* Directions for Beamforming if they we not set by command-line arguments */
 		for (int i = 0; i < N_BEAMS; i++){
 			dir[i].theta = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
 		}
 	}
 
-
 	/***********************************
-	 *			GPU Variables		   *
+	 GPU Card selection
+	 This code 			   
 	 ***********************************/
 
-	std::cout << "Executing beamformer.cu" << std::endl;
-	print_all_defines();
+
 
 	char prefered_dev_name[] = "GeForce GTX 1080";
 	int devicesCount;
@@ -158,8 +163,11 @@ int main(int argc, char *argv[]){
 		}
 	}
 
+	/***********************************
+	 *			GPU Variables		   *
+	 ***********************************/
 
-	/* CUBLAS Dimensions */
+	/* CUBLAS matrix dimensions */
 	int A_rows	 = N_BEAMS;
 	int A_cols 	 = N_ANTENNAS;
 	int A_stride = A_rows*A_cols;
@@ -171,9 +179,6 @@ int main(int argc, char *argv[]){
 	int C_stride = C_rows*C_cols;
 	float bw_per_channel = BW_PER_CHANNEL; 
 
-	/***********************************
-	 *			GPU Variables		   *
-	 ***********************************/
 	CxInt8_t *d_A; 				// Weight matrix (N_BEAMS X N_ANTENNAS, for N_FREQUENCIES)
 	CxInt8_t *d_B; 				// Data Matrix (N_ANTENNAS X N_TIMESTEPS_PER_GEMM, for N_FREQUENCIES)
 	char *d_data;				// Raw input data (Before data massaging)
@@ -417,8 +422,8 @@ int main(int argc, char *argv[]){
 	Deal with Headers (FOR DADA)
 	***************************************************/
 	#ifndef DEBUG
-		// read the headers from the input HDU and mark as cleared
-		// will block until header is present in dada ring buffer
+		/* read the headers from the input HDU and mark as cleared
+		   will block until header is present in dada ring buffer */
 		char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
 		if (!header_in)
 		{
@@ -448,12 +453,16 @@ int main(int argc, char *argv[]){
 
 
 
-int transfer_separation = 2;
-int total_separation = 4;
 
-/*********************************************************************************
-						START OBSERVATION LOOP
-*********************************************************************************/
+
+	/*********************************************************************************
+	START OBSERVATION LOOP
+	*********************************************************************************/
+
+	std::cout << "Executing beamformer.cu" << "\n";
+	std::cout << "MAX_TOTAL_SEP: "<< MAX_TOTAL_SEP << "\n";
+	std::cout << "MAX_TRANSFER_SEP: "<< MAX_TRANSFER_SEP << std::endl;
+
 	while (!observation_complete){
 		
 		#if VERBOSE
@@ -468,7 +477,7 @@ int total_separation = 4;
 		**************************************************/
 
 		/* Data is copied iff the analysis steps and transfer rates are keeping up */
-		if ((blocks_transfer_queue - blocks_analyzed < total_separation) && (blocks_transfer_queue - blocks_transferred < transfer_separation)){
+		if ((blocks_transfer_queue - blocks_analyzed < MAX_TOTAL_SEP) && (blocks_transfer_queue - blocks_transferred < MAX_TRANSFER_SEP)){
 
 			#if DEBUG
 				/***********************************

@@ -142,7 +142,8 @@
 // Solving Constants
 #define N_STREAMS 8
 #define N_DIRS  1024
-
+#define MAX_TRANSFER_SEP = 2;
+#define MAX_TOTAL_SEP = 4;
 
 
 /***********************************

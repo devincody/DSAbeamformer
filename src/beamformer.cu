@@ -340,8 +340,8 @@ int main(int argc, char *argv[]){
 		#if GENERATE_TEST_DATA
 			float test_direction;
 			char high, low;
-			for (int iii = 0; iii < N_DIRS; iii++){
-				test_direction = DEG2RAD(-HALF_FOV) + iii*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
+			for (int direction = 0; direction < N_DIRS; direction++){
+				test_direction = DEG2RAD(-HALF_FOV) + direction*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
 				for (int i = 0; i < N_FREQUENCIES; i++){
 					float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
 					// std::cout << "freq: " << freq << std::endl;
@@ -352,7 +352,7 @@ int main(int argc, char *argv[]){
 							high = ((char) round(SIG_MAX_VAL*cos(2*PI*pos[k].x*sin(test_direction)/wavelength))); //real
 							low  = ((char) round(SIG_MAX_VAL*sin(2*PI*pos[k].x*sin(test_direction)/wavelength))); //imag
 
-							data[iii*N_BYTES_PRE_EXPANSION_PER_GEMM + i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
+							data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*B_stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 						}
 					}
 				}
@@ -463,6 +463,9 @@ int main(int argc, char *argv[]){
 	std::cout << "MAX_TOTAL_SEP: "<< MAX_TOTAL_SEP << "\n";
 	std::cout << "MAX_TRANSFER_SEP: "<< MAX_TRANSFER_SEP << std::endl;
 
+	#if DEBUG
+		START_TIMER();
+	#endif
 	while (!observation_complete){
 		
 		#if VERBOSE
@@ -655,6 +658,15 @@ int main(int argc, char *argv[]){
 			}
 		}
 	} // end while (!observation_complete)
+
+	#if DEBUG
+		float observation_time_ms;
+		STOP_RECORD_TIMER(observation_time_ms);
+		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
+		std::cout << "Code produced outputs for " << N_DIRS*N_OUTPUTS_PER_GEMM << " data chunks.\n";
+		std::cout << "Time per data chunk: " << observation_time_ms/N_DIRS*N_OUTPUTS_PER_GEMM << " milliseconds.\n"
+		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS/observation_time_ms/1e6 << "GB/s" << std::endl;
+	#endif
 
 
 	for (int st = 0; st < N_STREAMS; st++){

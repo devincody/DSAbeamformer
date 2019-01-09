@@ -156,6 +156,7 @@ typedef char char8_t[8]; //eight chars = 64-bit so global memory bandwidth usage
 typedef CxInt8_t cuChar4_t[4];
 
 class antenna{
+/* Class which manages the x, y, and z positions of each antenna */
 public:
 	float x, y, z;
 	antenna(){x = 0; y = 0; z = 0;}
@@ -163,6 +164,7 @@ public:
 };
 
 class beam_direction{
+/* Class whcih manages the theta and phi directions of each beam */
 public:
 	float theta, phi;
 	beam_direction(){theta = 0; phi = 0;}
@@ -173,10 +175,13 @@ public:
  *		Defined Functions		   *
  ***********************************/
 
+/* Macro which converts from degrees to radians */
 #define DEG2RAD(x) ((x)*PI/180.0)
 
+/* Helper Macro for gpu error checking */
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 
+/* Function for gpu error checking */
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
 	if (code != cudaSuccess) 
@@ -186,13 +191,14 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 	}
 }
 
-
+/* Error checking for cuBLAS */
 void gpuBLASchk(int errval){
 	if (errval != CUBLAS_STATUS_SUCCESS){
 		std::cerr << "Failed BLAS call, error code " << errval << std::endl;
 	}
 }
 
+/* Variables and Functions for timing analysis */
 cudaEvent_t start;
 cudaEvent_t stop;
 

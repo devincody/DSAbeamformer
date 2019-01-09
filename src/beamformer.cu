@@ -238,7 +238,7 @@ int main(int argc, char *argv[]){
 		gpuErrchk(cudaMemcpy(d_vec_ones, vec_ones, N_FREQUENCIES*sizeof(float), cudaMemcpyHostToDevice));
 		gpuErrchk(cudaMemcpy(d_f_one, &h_f_one, sizeof(float), cudaMemcpyHostToDevice));
 		gpuErrchk(cudaMemcpy(d_f_zero, &h_f_zero, sizeof(float), cudaMemcpyHostToDevice));
-		std::cout << "Host-side zero: " << h_f_zero << " and host-side one" << h_f_one << std::endl;
+		std::cout << "Host-side zero: " << h_f_zero << " and host-side one: " << h_f_one << std::endl;
 		std::cout << "GPU-side one & zero:" << std::endl;
 		print_data_scalar<<<1, 1>>>(d_f_one);
 		print_data_scalar<<<1, 1>>>(d_f_zero);
@@ -282,11 +282,11 @@ int main(int argc, char *argv[]){
 		gpuErrchk(cudaStreamCreate(&stream[i]));
 		gpuBLASchk(cublasCreate(&handle[i]));
 		gpuBLASchk(cublasSetStream(handle[i], stream[i]));
-		gpuBLASchk(cublasSetPointerMode(handle[i], CUBLAS_POINTER_MODE_DEVICE));
+		gpuBLASchk(cublasSetPointerMode(handle[i], CUBLAS_POINTER_MODE_DEVICE)); //All constants reside on GPU
 		// cublasMath_t mode; 
 		// gpuBLASchk(cublasGetMathMode(handle[i], &mode));
 		// std::cout << "Mode[" << i << "] == " << mode << std::endl;
-		gpuBLASchk(cublasSetMathMode(handle[i], CUBLAS_TENSOR_OP_MATH ));
+		gpuBLASchk(cublasSetMathMode(handle[i], CUBLAS_TENSOR_OP_MATH )); //Enable use of tensor cores
 		// gpuBLASchk(cublasGetMathMode(handle[i], &mode));
 		// std::cout << "Mode[" << i << "] == " << mode << std::endl;
 		timeSlice[i] = i;
@@ -331,7 +331,7 @@ int main(int argc, char *argv[]){
 
 	#ifndef DEBUG
 		// DADA stuff
-		log = multilog_open ("real", 0);
+		log = multilog_open ("beam", 0);
 		multilog_add (log, stderr);
 		multilog (log, LOG_INFO, "creating hdu\n");
 
@@ -348,7 +348,7 @@ int main(int argc, char *argv[]){
 
 		// lock read on buffer
 		if (dada_hdu_lock_read (hdu_in) < 0) {
-			printf ("could not lock to dada buffer\n");
+			printf ("could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
 			return EXIT_FAILURE;
 		}
 
@@ -466,6 +466,10 @@ int main(int argc, char *argv[]){
 				if (bytes_read < block_size){
 					/* If there isn't enough data in the block, end the observation */
 					observation_complete = 1;
+					#if VERBOSE
+						std::cout <<"bytes_read < block_size, ending observation" << std::endl;
+					#endif
+					ipcio_close_block_read (hdu_in->data_block, bytes_read);
 					break;
 				}
 
@@ -612,7 +616,7 @@ int main(int argc, char *argv[]){
 		STOP_RECORD_TIMER(observation_time_ms);
 		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 		std::cout << "Code produced outputs for " << N_DIRS*N_OUTPUTS_PER_GEMM << " data chunks.\n";
-		std::cout << "Time per data chunk: " << observation_time_ms/N_DIRS*N_OUTPUTS_PER_GEMM << " milliseconds.\n";
+		std::cout << "Time per data chunk: " << observation_time_ms/(N_DIRS*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
 		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS/observation_time_ms/1e6 << "GB/s" << std::endl;
 	#endif
 

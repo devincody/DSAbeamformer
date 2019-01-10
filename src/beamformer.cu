@@ -464,7 +464,10 @@ int main(int argc, char *argv[]){
 				/***********************************
 					Else copy from PSRDADA block
 				***********************************/
-
+				#if VERBOSE
+					std::cout << "READING FROM PSRDADA" << std::endl;
+				#endif
+					
 				block = ipcio_open_block_read(hdu_in->data_block,&bytes_read, &block_id);
 
 				if (bytes_read != N_BYTES_PER_BLOCK){
@@ -475,7 +478,7 @@ int main(int argc, char *argv[]){
 					/* If there isn't enough data in the block, end the observation */
 					transfers_complete = 1;
 					#if VERBOSE
-						std::cout <<"bytes_read < block_size, ending observation" << std::endl;
+						std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
 					#endif
 					ipcio_close_block_read (hdu_in->data_block, bytes_read);
 					break;

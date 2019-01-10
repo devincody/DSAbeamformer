@@ -406,9 +406,12 @@ int main(int argc, char *argv[]){
 	START OBSERVATION LOOP
 	*********************************************************************************/
 	int observation_complete = 0;
+	int transfers_complete = 0;
+	#if VERBOSE
 	std::cout << "Executing beamformer.cu" << "\n";
 	std::cout << "MAX_TOTAL_SEP: "<< MAX_TOTAL_SEP << "\n";
 	std::cout << "MAX_TRANSFER_SEP: "<< MAX_TRANSFER_SEP << std::endl;
+	#endif
 
 	#if DEBUG
 		START_TIMER();
@@ -428,30 +431,35 @@ int main(int argc, char *argv[]){
 		**************************************************/
 
 		/* Data is copied iff the analysis steps and transfer rates are keeping up */
-		if ((blocks_transfer_queue - blocks_analyzed < MAX_TOTAL_SEP) && (blocks_transfer_queue - blocks_transferred < MAX_TRANSFER_SEP)){
-
+		if ((blocks_transfer_queue - blocks_analyzed < MAX_TOTAL_SEP) && (blocks_transfer_queue - blocks_transferred < MAX_TRANSFER_SEP) && !transfers_complete){
 			#if DEBUG
 				/***********************************
 				IF debugging, copy from "data" array
 				***********************************/
-				if (blocks_transfer_queue < N_DIRS/N_GEMMS_PER_BLOCK){
+				
+					
+
+				#if VERBOSE 
+					std::cout << "VERBOSE: Async copy" << std::endl;
+				#endif
+
+				/* Copy Block */
+				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
+											&data[N_BYTES_PER_BLOCK*blocks_transfer_queue],
+											N_BYTES_PER_BLOCK, 
+											cudaMemcpyHostToDevice,
+											HtoDstream));
+
+				/* Generate Cuda event which will indicate when the block has been transfered*/
+				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_on_GPU)], HtoDstream));
+
+				blocks_transfer_queue++;
+
+				if (blocks_transfer_queue >= N_DIRS/N_GEMMS_PER_BLOCK){
 					/* Only initiate transfers if fewer than N_DIRS directions have been analyzed */
-
-					#if VERBOSE 
-						std::cout << "VERBOSE: Async copy" << std::endl;
-					#endif
-
-					/* Copy Block */
-					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
-												&data[N_BYTES_PER_BLOCK*blocks_transfer_queue],
-												N_BYTES_PER_BLOCK, 
-												cudaMemcpyHostToDevice,
-												HtoDstream));
-
-					/* Generate Cuda event which will indicate when the block has been transfered*/
-					gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_on_GPU)], HtoDstream));
-					blocks_transfer_queue++;
+					transfers_complete = 1;
 				}
+
 			#else
 				/***********************************
 					Else copy from PSRDADA block
@@ -465,7 +473,7 @@ int main(int argc, char *argv[]){
 
 				if (bytes_read < block_size){
 					/* If there isn't enough data in the block, end the observation */
-					observation_complete = 1;
+					transfers_complete = 1;
 					#if VERBOSE
 						std::cout <<"bytes_read < block_size, ending observation" << std::endl;
 					#endif
@@ -586,10 +594,11 @@ int main(int argc, char *argv[]){
 
 
 		/**************************************************
-				Check if beamforming has completed
+			Check if beamforming analysis has completed
 		**************************************************/
 		for (uint64_t event = blocks_analyzed; event < blocks_analysis_queue; event ++){
 			if(cudaEventQuery(BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
+
 				//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
 				blocks_analyzed++;
 				#if VERBOSE
@@ -597,18 +606,29 @@ int main(int argc, char *argv[]){
 				#endif
 				gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)]));
 				gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
-				#if DEBUG
-					if ((current_gemm == N_DIRS-1) && (blocks_analyzed == blocks_transfer_queue)){
-						observation_complete = 1;
-						std::cout << "obs Complete" << std::endl;
-						break;
-					}
-				#endif
 				
 			} else {
 				break; // If previous analyzed blocks have not been finished, there's no reason to check the next blocks
 			}
 		}
+
+		/**************************************************
+		Check if observations should be concluded
+		**************************************************/
+		#if DEBUG
+			if ((current_gemm == N_DIRS-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+				observation_complete = 1;
+				std::cout << "obs Complete" << std::endl;
+				break;
+			}
+		#else
+			if ((blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+				observation_complete = 1;
+				std::cout << "obs Complete" << std::endl;
+				break;
+			}
+		#endif
+
 	} // end while (!observation_complete)
 
 	#if DEBUG

@@ -199,8 +199,8 @@ int main(int argc, char *argv[]){
 		float wavelength = C_SPEED/(1E9*freq);
 		for (int j = 0; j < N_ANTENNAS; j++){
 			for (int k = 0; k < N_BEAMS; k++){
-				A[i*A_stride + j*N_BEAMS + k].x = round(MAX_VAL*cos(-2*PI*pos[j].x*sin(dir[k].theta)/wavelength));
-				A[i*A_stride + j*N_BEAMS + k].y = round(MAX_VAL*sin(-2*PI*pos[j].x*sin(dir[k].theta)/wavelength));
+				A[i*A_stride + j*N_BEAMS + k].x = round(MAX_VAL*cos(-2*PI*(pos[j].x*sin(dir[k].theta) + pos[j].y*sin(dir[k].phi))/wavelength));
+				A[i*A_stride + j*N_BEAMS + k].y = round(MAX_VAL*sin(-2*PI*(pos[j].x*sin(dir[k].theta) + pos[j].y*sin(dir[k].phi))/wavelength));
 			}
 		}
 	}
@@ -306,7 +306,7 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		#if GENERATE_TEST_DATA
-			generate_test_data(data, pos, gpu, B_stride);
+			generate_test_data(data, pos, dir, gpu, B_stride);
 		#else
 			/* Generates Bogus data, typically 0x70 */
 			memset(data, BOGUS_DATA, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));

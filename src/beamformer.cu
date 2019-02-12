@@ -31,8 +31,8 @@ int main(int argc, char *argv[]){
 	or with test positions.
 	***************************************************/
 
-	antenna* pos = new antenna[N_ANTENNAS]();		// Locations of antennas
-	beam_direction* dir = new beam_direction[N_BEAMS]();		// Direction of bemformed beams
+	antenna* pos = new antenna[N_ANTENNAS]();				// Locations of antennas
+	beam_direction* dir = new beam_direction[N_BEAMS]();	// Direction of bemformed beams
 
 	bool pos_set = false;
 	bool dir_set = false;
@@ -109,14 +109,14 @@ int main(int argc, char *argv[]){
 	free(file_name);
 
 	if (!pos_set){
-		/* Populate location/direction Matricies if they we not set by command-line arguments */
+		/* Populate location/direction Matricies if they were not set by command-line arguments */
 		for (int i = 0; i < N_ANTENNAS; i++){
 			pos[i].x = i*500.0/(N_ANTENNAS-1) - 250.0;
 		}
 	}
 
 	if (!dir_set){
-		/* Directions for Beamforming if they we not set by command-line arguments */
+		/* Directions for Beamforming if they were not set by command-line arguments */
 		for (int i = 0; i < N_BEAMS; i++){
 			dir[i].theta = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
 		}
@@ -430,7 +430,7 @@ int main(int argc, char *argv[]){
 						Copy Data to GPU
 		**************************************************/
 
-		/* Data is copied iff the analysis steps and transfer rates are keeping up */
+		/* Data is copied iff the analysis steps and transfer rates are keeping up and there is still data */
 		if ((blocks_transfer_queue - blocks_analyzed < MAX_TOTAL_SEP) && (blocks_transfer_queue - blocks_transferred < MAX_TRANSFER_SEP) && !transfers_complete){
 			#if DEBUG
 				/***********************************
@@ -481,7 +481,6 @@ int main(int argc, char *argv[]){
 						std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
 					#endif
 					ipcio_close_block_read (hdu_in->data_block, bytes_read);
-					break;
 				}
 
 				/* Copy Block */

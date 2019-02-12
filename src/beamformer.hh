@@ -184,20 +184,20 @@ void usage(){
 	fprintf (stdout,
 	   "dsaX_beamformer [options]\n"
 	   " -g gpu 	select a predefined frequency range\n"
-	   " -f position_filename   file where the antenna positions are stored\n"
+	   " -f position_filename  file where the antenna positions are stored\n"
 	   " -d direction_filename file where the beam directions are stored\n"
-	   " -h        print usage\n");
+	   " -h         print usage\n");
 }
 #else
 void usage(){
 	fprintf (stdout,
 	   "dsaX_beamformer [options]\n"
-	   " -c core   bind process to CPU core\n"
-	   " -k key [default dada]\n"
+	   " -c core    bind process to CPU core\n"
+	   " -k key     [default dada]\n"
 	   " -g gpu 	select a predefined frequency range\n"
-	   " -f position_filename   file where the antenna positions are stored\n"
+	   " -f position_filename  file where the antenna positions are stored\n"
 	   " -d direction_filename file where the beam directions are stored\n"
-	   " -h        print usage\n");
+	   " -h         print usage\n");
 }
 #endif
 
@@ -254,7 +254,7 @@ int read_in_beam_directions(char * file_name, beam_direction* dir, bool * dir_se
 
 	for (int beam_idx = 0; beam_idx < N_BEAMS; beam_idx++){
 		input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
-		std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
+		//std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
 	}
 	*dir_set = true;
 	return 0;
@@ -273,7 +273,7 @@ int read_in_position_locations(char * file_name, antenna *pos, bool *pos_set){
 
 	for (int ant = 0; ant < N_ANTENNAS; ant++){
 		input_file >> pos[ant].x >> pos[ant].y >> pos[ant].z;
-		std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
+		//std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
 	}
 	*pos_set = true;
 	return 0;

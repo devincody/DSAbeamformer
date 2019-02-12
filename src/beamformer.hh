@@ -230,8 +230,8 @@ void generate_test_data(char *data, antenna pos[], beam_direction dir[], int gpu
 			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
 				for (int k = 0; k < N_ANTENNAS; k++){
 
-					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(dir[direction].x) + pos[k].y*sin(dir[direction].phi))/wavelength))); //real
-					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(dir[direction].x) + pos[k].y*sin(dir[direction].phi))/wavelength))); //imag
+					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(dir[direction].theta) + pos[k].y*sin(dir[direction].phi))/wavelength))); //real
+					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(dir[direction].theta) + pos[k].y*sin(dir[direction].phi))/wavelength))); //imag
 
 					data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 				}
@@ -254,7 +254,7 @@ int read_in_beam_directions(char * file_name, beam_direction* dir, bool * dir_se
 
 	for (int beam_idx = 0; beam_idx < N_BEAMS; beam_idx++){
 		input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
-		//std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
+		std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
 	}
 	*dir_set = true;
 	return 0;
@@ -273,7 +273,7 @@ int read_in_position_locations(char * file_name, antenna *pos, bool *pos_set){
 
 	for (int ant = 0; ant < N_ANTENNAS; ant++){
 		input_file >> pos[ant].x >> pos[ant].y >> pos[ant].z;
-		//std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
+		std::cout << "Read in: (" << pos[ant].x << ", " << pos[ant].y << ", " << pos[ant].z << ")" << std::endl;
 	}
 	*pos_set = true;
 	return 0;

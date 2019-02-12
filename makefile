@@ -18,11 +18,16 @@ verbose: CXXFLAGS += -DVERBOSE -lpsrdada
 debug: beam
 verbose: beam
 
+.PHONY: junk
 junk: 
 	dada_junkdb -c 0 -z -k baab -r 4000 -t 10 lib/correlator_header_dsaX.txt
 
 beam: $(SRCDIR)/beamformer.cu
 	$(CC) -o $(BINDIR)/$@ $^ -I$(DADA_INCLUDE) -L$(DADA_LIB) $(CXXFLAGS) $(NVFLAGS)
 
+.PHONY: clean
 clean:
-	rm beam
+	rm bin/beam; \
+	kill -9 $(ps aux | grep -e bin/beam | awk '{print $2}'); \
+	dada_db -k baab -d;\
+	dada_db -d ;

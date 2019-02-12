@@ -306,7 +306,7 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		#if GENERATE_TEST_DATA
-			generate_test_data(data, pos, dir, gpu, B_stride);
+			generate_1D_test_data(data, pos, gpu, B_stride);
 		#else
 			/* Generates Bogus data, typically 0x70 */
 			memset(data, BOGUS_DATA, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));

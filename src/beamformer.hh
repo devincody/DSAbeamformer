@@ -217,12 +217,12 @@ void dsaX_dbgpu_cleanup (dada_hdu_t * in,  multilog_t * log) {
 ***************************************************/
 
 #if DEBUG
-void generate_test_data(char *data, antenna pos[], beam_direction dir[], int gpu, int stride){
-	// float test_direction;
+void generate_1D_test_data(char *data, antenna pos[], int gpu, int stride){
+	float test_direction;
 	char high, low;
 	
 	for (long direction = 0; direction < N_DIRS; direction++){
-		// test_direction = dir[direction];   //DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
+		test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
 		for (int i = 0; i < N_FREQUENCIES; i++){
 			float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
 			// std::cout << "freq: " << freq << std::endl;
@@ -230,8 +230,8 @@ void generate_test_data(char *data, antenna pos[], beam_direction dir[], int gpu
 			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
 				for (int k = 0; k < N_ANTENNAS; k++){
 
-					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(dir[direction].x) + pos[k].y*sin(dir[direction].phi))/wavelength))); //real
-					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(dir[direction].x) + pos[k].y*sin(dir[direction].phi))/wavelength))); //imag
+					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(test_direction))/wavelength))); //real
+					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(test_direction))/wavelength))); //imag
 
 					data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 				}

@@ -226,6 +226,7 @@ void generate_1D_test_data(char *data, beam_direction sources[], antenna pos[], 
 	char high, low;
 	
 	for (long direction = 0; direction < N_SOURCES_PER_BATCH; direction++){
+		std::cout << "direction"
 		//test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_PT_SOURCES-1);
 
 		for (int i = 0; i < N_FREQUENCIES; i++){
@@ -369,8 +370,10 @@ void print_all_defines(void){
 	std::cout << "SIG_BITS:" << SIG_BITS << "\n";
 	std::cout << "SIG_MAX_VAL:" << SIG_MAX_VAL << "\n";
 	std::cout << "N_STREAMS:" << N_STREAMS << "\n";
-	#if DEGUG
+	#if DEBUG
 		std::cout << "N_PT_SOURCES:" << N_PT_SOURCES << "\n";
+		std::cout << "N_SOURCE_BATCHES"  << N_SOURCE_BATCHES << "\n";
+		std::cout << "N_SOURCES_PER_BATCH"  << N_SOURCES_PER_BATCH << "\n";
 	#endif
 
 	std::cout << std::endl;

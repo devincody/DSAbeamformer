@@ -15,11 +15,11 @@ You should have the following code packages installed before using DART:
 
 1. [Cuda 10.0](https://developer.nvidia.com/cuda-downloads)
 2. [PSRDADA](http://psrdada.sourceforge.net/download.shtml)
-	0. csh
-	1. m4
-	2. libtools
-	3. autoconf
-	4. automake
+	1. csh
+	2. m4
+	3. libtools
+	4. autoconf
+	5. automake
 
 
 ## How does it work?

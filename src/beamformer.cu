@@ -413,7 +413,9 @@ int main(int argc, char *argv[]){
 	*********************************************************************************/
 	int observation_complete = 0;
 	int transfers_complete = 0;
-	int source_batch_counter = 0;
+	#if DEBUG
+		int source_batch_counter = 0;
+	#endif
 
 	#if VERBOSE
 		std::cout << "Executing beamformer.cu" << "\n";
@@ -455,7 +457,7 @@ int main(int argc, char *argv[]){
 				 ***********************************/
 				if (use_source_catalog && (blocks_transfer_queue >= (source_batch_counter * N_SOURCES_PER_BATCH)/ N_GEMMS_PER_BLOCK) ){
 					//Generates the dummy data given a set of directions.
-					std::cout << "Generating new source data" << std::cout;
+					std::cout << "Generating new source data" << std::endl;
 					generate_1D_test_data(data, sources, pos, gpu, B_stride, source_batch_counter);
 					source_batch_counter++;
 					if (source_batch_counter == N_SOURCE_BATCHES){

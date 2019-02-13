@@ -235,8 +235,8 @@ void generate_1D_test_data(char *data, beam_direction sources[], antenna pos[], 
 			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
 				for (int k = 0; k < N_ANTENNAS; k++){
 
-					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(sources[direction]))/wavelength))); //real
-					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(sources[direction]))/wavelength))); //imag
+					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(sources[direction].theta))/wavelength))); //real
+					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(sources[direction].theta))/wavelength))); //imag
 
 					data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 				}
@@ -369,7 +369,9 @@ void print_all_defines(void){
 	std::cout << "SIG_BITS:" << SIG_BITS << "\n";
 	std::cout << "SIG_MAX_VAL:" << SIG_MAX_VAL << "\n";
 	std::cout << "N_STREAMS:" << N_STREAMS << "\n";
-	std::cout << "N_PT_SOURCES:" << N_PT_SOURCES << "\n";
+	#if DEGUG
+		std::cout << "N_PT_SOURCES:" << N_PT_SOURCES << "\n";
+	#endif
 
 	std::cout << std::endl;
 }

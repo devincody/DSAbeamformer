@@ -37,12 +37,18 @@ int main(int argc, char *argv[]){
 	bool pos_set = false;
 	bool dir_set = false;
 
+	#if DEBUG
+		beam_direction* sources = new beam_direction[N_PT_SOURCES]();  // Array to hold direction of the test sources
+		bool use_source_catalog = false;
+	#endif
+
+
 	/***************************************************
 	Parse Command Line Options
 	***************************************************/
 	
 	#if DEBUG	
-		char legal_commandline_options[] = "g:f:d:h";//{'g','f',':','d',':','h'};
+		char legal_commandline_options[] = "s:g:f:d:h";//{'g','f',':','d',':','h'};
 	#else
 		char legal_commandline_options[] = "c:k:g:f:d:h";//{'c',':','k',':','g',':','f',':','d',':','h'}; //
 	#endif
@@ -70,6 +76,15 @@ int main(int argc, char *argv[]){
 						return EXIT_FAILURE;
 					}
 					break;
+			#else
+				case 's':
+					/* To setup source directions */
+					if (sscanf (optarg, "%s", file_name) != 1) {
+						fprintf (stderr, "beam: could not parse source direction file from %s\n", optarg);
+						return EXIT_FAILURE;
+					}
+					read_in_beam_directions(file_name, N_PT_SOURCES, sources, &use_source_catalog);
+					break;
 			#endif
 
 			case 'g':
@@ -86,7 +101,7 @@ int main(int argc, char *argv[]){
 				/* To setup antenna position locations */
 				
 				if (sscanf (optarg, "%s", file_name) != 1) {
-					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
+					fprintf (stderr, "beam: could not parse antenna location file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
 				read_in_position_locations(file_name, pos, &pos_set);
@@ -98,7 +113,7 @@ int main(int argc, char *argv[]){
 					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
-				read_in_beam_directions(file_name, dir, &dir_set);
+				read_in_beam_directions(file_name, N_BEAMS, dir, &dir_set);
 				break;
 
 			case 'h':
@@ -121,8 +136,6 @@ int main(int argc, char *argv[]){
 			dir[i].theta = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
 		}
 	}
-
-
 
 	/***********************************
 	 *			GPU Variables		   *
@@ -166,8 +179,15 @@ int main(int argc, char *argv[]){
 	 *			HOST Variables		   *
 	 ***********************************/
 	#if DEBUG
-		char *data = new char[N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS](); // storage for test signals
-		gpuErrchk(cudaHostRegister(data, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
+		char *data = new char[N_BYTES_PRE_EXPANSION_PER_GEMM*N_SOURCES_PER_BATCH](); // storage for test signals
+		gpuErrchk(cudaHostRegister(data, N_BYTES_PRE_EXPANSION_PER_GEMM*N_SOURCES_PER_BATCH*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
+
+		// set memory to zero if a source catalog wasn't provided
+		if (!use_source_catalog){
+			/* Generates Bogus data, typically 0x70 */
+			memset(data, BOGUS_DATA, INPUT_DATA_SIZE*sizeof(char));
+			std::cout << "BOGUS DATA " << std::endl;
+		}
 	#endif
 
 	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
@@ -179,8 +199,8 @@ int main(int argc, char *argv[]){
 	#if DEBUG
 		/* Vectors of all ones for de-dispersion */
 		float *d_dedispersed;	// Data after being de-dispersed
-		float *out_dedispersed = new float[N_BEAMS*N_DIRS]();
-		gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_DIRS*sizeof(float), cudaHostRegisterPortable));
+		float *out_dedispersed = new float[N_BEAMS*N_PT_SOURCES]();
+		gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_PT_SOURCES*sizeof(float), cudaHostRegisterPortable));
 
 		float *d_vec_ones;		
 		float *vec_ones = new float[N_FREQUENCIES]; 
@@ -298,21 +318,7 @@ int main(int argc, char *argv[]){
 		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[i],    cudaEventDisableTiming));
 	}
 
-	/***********************************
-	 GENERATE TEST SIGNAL			   
-	 Generates the dummy data given a set
-	 of directions. Stores in 
-	 ***********************************/
 
-	#if DEBUG
-		#if GENERATE_TEST_DATA
-			generate_1D_test_data(data, pos, gpu, B_stride);
-		#else
-			/* Generates Bogus data, typically 0x70 */
-			memset(data, BOGUS_DATA, N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS*sizeof(char));
-			std::cout << "BOGUS DATA " << std::endl;
-		#endif
-	#endif 
 
 	uint64_t blocks_analyzed = 0;
 	uint64_t blocks_transferred = 0;
@@ -407,10 +413,12 @@ int main(int argc, char *argv[]){
 	*********************************************************************************/
 	int observation_complete = 0;
 	int transfers_complete = 0;
+	int source_batch_counter = 0;
+
 	#if VERBOSE
-	std::cout << "Executing beamformer.cu" << "\n";
-	std::cout << "MAX_TOTAL_SEP: "<< MAX_TOTAL_SEP << "\n";
-	std::cout << "MAX_TRANSFER_SEP: "<< MAX_TRANSFER_SEP << std::endl;
+		std::cout << "Executing beamformer.cu" << "\n";
+		std::cout << "MAX_TOTAL_SEP: "<< MAX_TOTAL_SEP << "\n";
+		std::cout << "MAX_TRANSFER_SEP: "<< MAX_TRANSFER_SEP << std::endl;
 	#endif
 
 	#if DEBUG
@@ -436,12 +444,24 @@ int main(int argc, char *argv[]){
 				/***********************************
 				IF debugging, copy from "data" array
 				***********************************/
-				
-					
 
 				#if VERBOSE 
 					std::cout << "VERBOSE: Async copy" << std::endl;
 				#endif
+
+
+				/***********************************
+				 GENERATE TEST SIGNAL			   
+				 ***********************************/
+				if (use_source_catalog && (blocks_transfer_queue >= (source_batch_counter * N_SOURCES_PER_BATCH)/ N_GEMMS_PER_BLOCK) ){
+					//Generates the dummy data given a set of directions.
+					std::cout << "Generating new source data" << std::cout;
+					generate_1D_test_data(data, sources, pos, gpu, B_stride, source_batch_counter);
+					source_batch_counter++;
+					if (source_batch_counter == N_SOURCE_BATCHES){
+						std::cout << "Program should be over soon" << std::endl;
+					}
+				}
 
 				/* Copy Block */
 				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
@@ -455,8 +475,8 @@ int main(int argc, char *argv[]){
 
 				blocks_transfer_queue++;
 
-				if (blocks_transfer_queue >= N_DIRS/N_GEMMS_PER_BLOCK){
-					/* Only initiate transfers if fewer than N_DIRS directions have been analyzed */
+				if (blocks_transfer_queue >= N_PT_SOURCES/N_GEMMS_PER_BLOCK){
+					/* Only initiate transfers if fewer than N_PT_SOURCES directions have been analyzed */
 					transfers_complete = 1;
 				}
 
@@ -618,7 +638,7 @@ int main(int argc, char *argv[]){
 		Check if observations should be concluded
 		**************************************************/
 		#if DEBUG
-			if ((current_gemm == N_DIRS-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+			if ((current_gemm == N_PT_SOURCES-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
 				observation_complete = 1;
 				std::cout << "obs Complete" << std::endl;
 				break;
@@ -637,9 +657,9 @@ int main(int argc, char *argv[]){
 		float observation_time_ms;
 		STOP_RECORD_TIMER(observation_time_ms);
 		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
-		std::cout << "Code produced outputs for " << N_DIRS*N_OUTPUTS_PER_GEMM << " data chunks.\n";
-		std::cout << "Time per data chunk: " << observation_time_ms/(N_DIRS*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
-		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS/observation_time_ms/1e6 << "GB/s" << std::endl;
+		std::cout << "Code produced outputs for " << N_PT_SOURCES*N_OUTPUTS_PER_GEMM << " data chunks.\n";
+		std::cout << "Time per data chunk: " << observation_time_ms/(N_PT_SOURCES*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
+		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_PT_SOURCES/observation_time_ms/1e6 << "GB/s" << std::endl;
 	#endif
 
 
@@ -653,14 +673,14 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		char filename[] = "bin/data.py";
-		write_array_to_disk_as_python_file(out_dedispersed, N_DIRS, N_BEAMS, filename);
+		write_array_to_disk_as_python_file(out_dedispersed, N_PT_SOURCES, N_BEAMS, filename);
 		/* Export debug data to a python file. */
 
 		// std::ofstream f; // File for data output
 		// f.open("bin/data.py"); // written such that it can be imported into any python file
 		// f << "A = [[";
 		
-		// for (int jj = 0; jj < N_DIRS; jj++){
+		// for (int jj = 0; jj < N_PT_SOURCES; jj++){
 		// 	for (int ii = 0; ii < N_BEAMS; ii++){
 		// 		f << out_dedispersed[jj*N_BEAMS + ii];
 		// 		// std::cout << out_dedispersed[jj*N_BEAMS + ii] << ", ";
@@ -669,7 +689,7 @@ int main(int argc, char *argv[]){
 		// 		}
 		// 	}
 
-		// 	if (jj != N_DIRS-1){
+		// 	if (jj != N_PT_SOURCES-1){
 		// 		f << "],\n[";
 		// 	} else {
 		// 		f<< "]]"<<std::endl;

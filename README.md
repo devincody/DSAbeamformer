@@ -15,11 +15,12 @@ You should have the following code packages installed before using DART:
 
 1. Cuda 10.0
 2. PSRDADA
+	0. csh
 	1. m4
 	2. libtools
 	3. autoconf
 	4. automake
-	5. csh
+
 
 ## How does it work?
 

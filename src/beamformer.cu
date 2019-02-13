@@ -1,5 +1,5 @@
-#include "beamformer.hh"
-#include "beamformer.cuh"
+#include "beamformer.hh" // non-cuda header file
+#include "beamformer.cuh"// cuda header file
 
 
 int main(int argc, char *argv[]){
@@ -179,8 +179,8 @@ int main(int argc, char *argv[]){
 	 *			HOST Variables		   *
 	 ***********************************/
 	#if DEBUG
-		char *data = new char[N_BYTES_PRE_EXPANSION_PER_GEMM*N_SOURCES_PER_BATCH](); // storage for test signals
-		gpuErrchk(cudaHostRegister(data, N_BYTES_PRE_EXPANSION_PER_GEMM*N_SOURCES_PER_BATCH*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
+		char *data = new char[INPUT_DATA_SIZE](); // storage for test signals
+		gpuErrchk(cudaHostRegister(data, INPUT_DATA_SIZE*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
 
 		// set memory to zero if a source catalog wasn't provided
 		if (!use_source_catalog){
@@ -232,7 +232,7 @@ int main(int argc, char *argv[]){
 	gpuErrchk(cudaMalloc(&d_A, 		A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_B, 		N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_C, 		N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
-	gpuErrchk(cudaMalloc(&d_data, 	N_BYTES_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
+	gpuErrchk(cudaMalloc(&d_data, 	N_BYTES_PER_BLOCK*N_BLOCKS_ON_GPU)); 							// array for raw data
 	gpuErrchk(cudaMalloc(&d_out, 	N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
 
 	/* Cublas Constants */
@@ -271,7 +271,7 @@ int main(int argc, char *argv[]){
 	/* Zero out GPU memory with cudaMemset (this is helpful when the number of antennas != N_ANTENNAS) */
 	gpuErrchk(cudaMemset(d_B, 0,  	N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMemset(d_C, 0,  	N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
-	gpuErrchk(cudaMemset(d_data, 0,  N_BYTES_PER_BLOCK*N_BLOCKS_on_GPU)); 							// array for raw data
+	gpuErrchk(cudaMemset(d_data, 0,  N_BYTES_PER_BLOCK*N_BLOCKS_ON_GPU)); 							// array for raw data
 	gpuErrchk(cudaMemset(d_out, 0,  N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
 
 	#if DEBUG
@@ -291,8 +291,8 @@ int main(int argc, char *argv[]){
 	cublasHandle_t handle[N_STREAMS];
 	// std::thread thread[N_STREAMS];
 	int timeSlice[N_STREAMS];
-	cudaEvent_t BlockTransferredSync[5*N_BLOCKS_on_GPU];
-	cudaEvent_t BlockAnalyzedSync[5*N_BLOCKS_on_GPU];
+	cudaEvent_t BlockTransferredSync[5*N_BLOCKS_ON_GPU];
+	cudaEvent_t BlockAnalyzedSync[5*N_BLOCKS_ON_GPU];
 
 	// gpuErrchk(cudaStreamCreateWithPriority(&HtoDstream, cudaStreamNonBlocking, priority_high));
 	gpuErrchk(cudaStreamCreate(&HtoDstream));
@@ -313,7 +313,7 @@ int main(int argc, char *argv[]){
 	}
 	
 
-	for (int i = 0; i < 5*N_BLOCKS_on_GPU; i++){
+	for (int i = 0; i < 5*N_BLOCKS_ON_GPU; i++){
 		gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[i], cudaEventDisableTiming));
 		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[i],    cudaEventDisableTiming));
 	}
@@ -467,14 +467,14 @@ int main(int argc, char *argv[]){
 				}
 
 				/* Copy Block */
-				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
+				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_ON_GPU)], 
 											&data[(N_BYTES_PER_BLOCK*blocks_transfer_queue)%INPUT_DATA_SIZE],
 											N_BYTES_PER_BLOCK, 
 											cudaMemcpyHostToDevice,
 											HtoDstream));
 
 				/* Generate Cuda event which will indicate when the block has been transfered*/
-				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_on_GPU)], HtoDstream));
+				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_ON_GPU)], HtoDstream));
 
 				blocks_transfer_queue++;
 
@@ -507,7 +507,7 @@ int main(int argc, char *argv[]){
 				}
 
 				/* Copy Block */
-				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
+				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_ON_GPU)], 
 											block,
 											N_BYTES_PER_BLOCK, 
 											cudaMemcpyHostToDevice,
@@ -517,7 +517,7 @@ int main(int argc, char *argv[]){
 				ipcio_close_block_read (hdu_in->data_block, bytes_read);
 
 				/* Generate Cuda event which will indicate when the block has been transfered*/
-				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_on_GPU)], HtoDstream));
+				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue%(5*N_BLOCKS_ON_GPU)], HtoDstream));
 				blocks_transfer_queue++;
 			#endif
 		}
@@ -528,7 +528,7 @@ int main(int argc, char *argv[]){
 
 		/* Iterate through all left-over blocks and see if they've been finished */
 		for (uint64_t event = blocks_transferred; event < blocks_transfer_queue; event ++){
-			if(cudaEventQuery(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
+			if(cudaEventQuery(BlockTransferredSync[event%(5*N_BLOCKS_ON_GPU)]) == cudaSuccess){
 			
 				#if VERBOSE
 					std::cout << "Block " << event << " transfered to GPU" << std::endl;
@@ -537,8 +537,8 @@ int main(int argc, char *argv[]){
 				blocks_transferred ++;
 
 				/* Destroy and Recreate Flags */
-				gpuErrchk(cudaEventDestroy(BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)]));
-				gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
+				gpuErrchk(cudaEventDestroy(BlockTransferredSync[event%(5*N_BLOCKS_ON_GPU)]));
+				gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[event%(5*N_BLOCKS_ON_GPU)], cudaEventDisableTiming));
 			} else {
 				break; // dont need to check later blocks if current block has not finished
 			}
@@ -558,7 +558,7 @@ int main(int argc, char *argv[]){
 				for (int st = 0; st < N_STREAMS; st++){
 
 					/* Expand input from 4-bit integers to 8-bit integers */
-					expand_input<<<10000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*(blocks_analysis_queue%N_BLOCKS_on_GPU) + timeSlice[st])],
+					expand_input<<<10000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*(blocks_analysis_queue%N_BLOCKS_ON_GPU) + timeSlice[st])],
 														      (char *) &d_B[N_CX_IN_PER_GEMM*st], 
 														      B_stride*N_FREQUENCIES);
 
@@ -613,7 +613,7 @@ int main(int argc, char *argv[]){
 
 				}
 			}
-			gpuErrchk(cudaEventRecord(BlockAnalyzedSync[blocks_analysis_queue%(5*N_BLOCKS_on_GPU)], stream[N_STREAMS-1]));
+			gpuErrchk(cudaEventRecord(BlockAnalyzedSync[blocks_analysis_queue%(5*N_BLOCKS_ON_GPU)], stream[N_STREAMS-1]));
 			blocks_analysis_queue ++;
 		}
 
@@ -622,15 +622,15 @@ int main(int argc, char *argv[]){
 			Check if beamforming analysis has completed
 		**************************************************/
 		for (uint64_t event = blocks_analyzed; event < blocks_analysis_queue; event ++){
-			if(cudaEventQuery(BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)]) == cudaSuccess){
+			if(cudaEventQuery(BlockAnalyzedSync[event%(5*N_BLOCKS_ON_GPU)]) == cudaSuccess){
 
 				//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
 				blocks_analyzed++;
 				#if VERBOSE
 					std::cout << "Block " << event << " Analyzed" << std::endl;
 				#endif
-				gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)]));
-				gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[event%(5*N_BLOCKS_on_GPU)], cudaEventDisableTiming));
+				gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event%(5*N_BLOCKS_ON_GPU)]));
+				gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[event%(5*N_BLOCKS_ON_GPU)], cudaEventDisableTiming));
 				
 			} else {
 				break; // If previous analyzed blocks have not been finished, there's no reason to check the next blocks
@@ -704,7 +704,7 @@ int main(int argc, char *argv[]){
 
 	std::cout << "Freeing CUDA Structures" << std::endl;
 
-	for (int event = 0; event < 5*N_BLOCKS_on_GPU; event++){
+	for (int event = 0; event < 5*N_BLOCKS_ON_GPU; event++){
 		gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event]));
 		gpuErrchk(cudaEventDestroy(BlockTransferredSync[event]));
 	}

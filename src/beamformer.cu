@@ -433,6 +433,7 @@ int main(int argc, char *argv[]){
 			/* Header to be printed during every loop */
 			std::cout << "##########################################" << std::endl;
 			std::cout << "A: " << blocks_analyzed <<  ", AQ: " << blocks_analysis_queue << ", T: " << blocks_transferred << ", TQ: " << blocks_transfer_queue << std::endl;
+			std::cout << "current_gemm: " << current_gemm << "transfers_complete: " << transfers_complete << std::endl;
 		#endif 
 
 
@@ -469,7 +470,7 @@ int main(int argc, char *argv[]){
 				/***********************************
 				 Copy Block			   
 				 ***********************************/
-				if (blocks_transferred_queue < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) {
+				if (blocks_transfer_queue < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) {
 					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK * (blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
 												&data[(N_BYTES_PER_BLOCK * blocks_transfer_queue) % INPUT_DATA_SIZE],
 												N_BYTES_PER_BLOCK, 

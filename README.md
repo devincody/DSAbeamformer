@@ -13,8 +13,8 @@ This is a collection of gpu-accelerated code which searches for FRBs in real tim
 ## Prerequisites
 You should have the following code packages installed before using DART:
 
-1. Cuda 10.0
-2. PSRDADA
+1. [Cuda 10.0](https://developer.nvidia.com/cuda-downloads)
+2. [PSRDADA](http://psrdada.sourceforge.net/download.shtml)
 	0. csh
 	1. m4
 	2. libtools

@@ -48,9 +48,9 @@ int main(int argc, char *argv[]){
 	***************************************************/
 	
 	#if DEBUG	
-		char legal_commandline_options[] = "s:g:f:d:h";//{'g','f',':','d',':','h'};
+		char legal_commandline_options[] = "s:g:p:d:h";//{'g','f',':','d',':','h'};
 	#else
-		char legal_commandline_options[] = "c:k:g:f:d:h";//{'c',':','k',':','g',':','f',':','d',':','h'}; //
+		char legal_commandline_options[] = "c:k:g:p:d:h";//{'c',':','k',':','g',':','f',':','d',':','h'}; //
 	#endif
 
 	int arg = 0;
@@ -88,7 +88,7 @@ int main(int argc, char *argv[]){
 			#endif
 
 			case 'g':
-				/* to set the gpu */
+				/* to select a predefined frequency range */
 				if (optarg){
 					gpu = atoi(optarg);
 					break;
@@ -97,7 +97,7 @@ int main(int argc, char *argv[]){
 					return EXIT_FAILURE;
 				}
 			
-			case 'f':
+			case 'p':
 				/* To setup antenna position locations */
 				
 				if (sscanf (optarg, "%s", file_name) != 1) {

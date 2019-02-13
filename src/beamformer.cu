@@ -458,7 +458,7 @@ int main(int argc, char *argv[]){
 				if (use_source_catalog && (blocks_transferred == (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) ){
 					//Generates the dummy data given a set of directions.
 					std::cout << "Generating new source data" << std::endl;
-					generate_1D_test_data(data, sources, pos, gpu, B_stride, source_batch_counter);
+					generate_test_data(data, sources, pos, gpu, B_stride, source_batch_counter);
 					source_batch_counter ++;
 					if (source_batch_counter == N_SOURCE_BATCHES){
 						std::cout << "Program should be over soon" << std::endl;
@@ -683,29 +683,6 @@ int main(int argc, char *argv[]){
 	#if DEBUG
 		char filename[] = "bin/data.py";
 		write_array_to_disk_as_python_file(out_dedispersed, N_PT_SOURCES, N_BEAMS, filename);
-		/* Export debug data to a python file. */
-
-		// std::ofstream f; // File for data output
-		// f.open("bin/data.py"); // written such that it can be imported into any python file
-		// f << "A = [[";
-		
-		// for (int jj = 0; jj < N_PT_SOURCES; jj++){
-		// 	for (int ii = 0; ii < N_BEAMS; ii++){
-		// 		f << out_dedispersed[jj*N_BEAMS + ii];
-		// 		// std::cout << out_dedispersed[jj*N_BEAMS + ii] << ", ";
-		// 		if (ii != N_BEAMS - 1){
-		// 			f << ",";
-		// 		}
-		// 	}
-
-		// 	if (jj != N_PT_SOURCES-1){
-		// 		f << "],\n[";
-		// 	} else {
-		// 		f<< "]]"<<std::endl;
-		// 	}
-		// }
-
-		// f.close();
 	#endif
 
 	std::cout << "Freeing CUDA Structures" << std::endl;

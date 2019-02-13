@@ -43,9 +43,6 @@
 ***************************************************/
 
 #if DEBUG
-	/* If 1 simulates a point source which varies across the field of view
-	   if 0 Bogus data is used instead */
-	#define GENERATE_TEST_DATA 1
 	#define BOGUS_DATA 0x70
 #endif
 
@@ -106,13 +103,14 @@
 #define N_BYTES_POST_EXPANSION_PER_GEMM  (N_CX_IN_PER_GEMM*N_CX)
 
 /* Number of Bytes before expansion. Each complex number uses half a Byte */
-#define N_BYTES_PRE_EXPANSION_PER_GEMM  N_CX_IN_PER_GEMM*N_CX/2
+#define N_BYTES_PRE_EXPANSION_PER_GEMM  (N_CX_IN_PER_GEMM*N_CX/2)
 
 /* Number of Bytes (before expansion) for input array */
-#define N_BYTES_PER_BLOCK N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK
+#define N_BYTES_PER_BLOCK (N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK)
 
-
-#define INPUT_DATA_SIZE N_BYTES_PRE_EXPANSION_PER_GEMM*N_DIRS
+#if DEBUG
+	#define INPUT_DATA_SIZE (N_BYTES_PRE_EXPANSION_PER_GEMM*N_SOURCES_PER_BATCH)
+#endif
 
 // Data Indexing, Offsets
 #define N_GPUS 8
@@ -136,9 +134,14 @@
 
 // Solving Constants
 #define N_STREAMS 8
-#define N_DIRS  1024
 #define MAX_TRANSFER_SEP 2
 #define MAX_TOTAL_SEP 4
+
+#if DEBUG
+	#define N_PT_SOURCES  1024			// Number of sources
+	#define N_SOURCE_BATCHES 4
+	#define N_SOURCES_PER_BATCH (N_PT_SOURCES/N_SOURCE_BATCHES)
+#endif
 
 
 /***************************************************
@@ -163,6 +166,7 @@ class beam_direction{
 public:
 	float theta, phi;
 	beam_direction(){theta = 0; phi = 0;}
+	beam_direction(float th, float ph) : theta(th), phi(ph) {}
 	~beam_direction(){}
 };
 
@@ -217,12 +221,13 @@ void dsaX_dbgpu_cleanup (dada_hdu_t * in,  multilog_t * log) {
 ***************************************************/
 
 #if DEBUG
-void generate_1D_test_data(char *data, antenna pos[], int gpu, int stride){
-	float test_direction;
+void generate_1D_test_data(char *data, beam_direction sources[], antenna pos[], int gpu, int stride, int source_batch_counter){
+	// float test_direction;
 	char high, low;
 	
-	for (long direction = 0; direction < N_DIRS; direction++){
-		test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_DIRS-1);
+	for (long direction = source_batch_counter*N_SOURCES_PER_BATCH; direction < (source_batch_counter+1)*N_SOURCES_PER_BATCH; direction++){
+		//test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_PT_SOURCES-1);
+
 		for (int i = 0; i < N_FREQUENCIES; i++){
 			float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
 			// std::cout << "freq: " << freq << std::endl;
@@ -230,8 +235,8 @@ void generate_1D_test_data(char *data, antenna pos[], int gpu, int stride){
 			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
 				for (int k = 0; k < N_ANTENNAS; k++){
 
-					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(test_direction))/wavelength))); //real
-					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(test_direction))/wavelength))); //imag
+					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(sources[direction]))/wavelength))); //real
+					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(sources[direction]))/wavelength))); //imag
 
 					data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 				}
@@ -239,20 +244,46 @@ void generate_1D_test_data(char *data, antenna pos[], int gpu, int stride){
 		}
 	}
 }
+
+// void generate_2D_test_data(char *data, antenna pos[], int gpu, int stride, int source_batch_counter){
+// 	beam_direction test_direction;
+// 	char high, low;
+	
+// 	for (long direction = 0; direction < N_PT_SOURCES; direction++){
+// 		test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_PT_SOURCES-1);
+// 		for (int i = 0; i < N_FREQUENCIES; i++){
+// 			float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
+// 			// std::cout << "freq: " << freq << std::endl;
+// 			float wavelength = C_SPEED/(1E9*freq);
+// 			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
+// 				for (int k = 0; k < N_ANTENNAS; k++){
+
+// 					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(test_direction) + pos[k].x*sin(test_direction))/wavelength))); //real
+// 					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(test_direction) + pos[k].x*sin(test_direction))/wavelength))); //imag
+
+// 					data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
+// 				}
+// 			}
+// 		}
+// 	}
+
+// }
+
+
 #endif
 
-int read_in_beam_directions(char * file_name, beam_direction* dir, bool * dir_set){
+int read_in_beam_directions(char * file_name, int expected_beams, beam_direction* dir, bool * dir_set){
 	std::ifstream input_file;
 
 	input_file.open(file_name);
 	int nbeam;
 	input_file >> nbeam;
-	if (nbeam != N_BEAMS){
-		std::cout << "Number of beams in file (" << nbeam << ") does not match N_BEAMS ("<< N_BEAMS << ")" <<std::endl;
+	if (nbeam != expected_beams){
+		std::cout << "Number of beams in file (" << nbeam << ") does not match expected ("<< expected_beams << ")" <<std::endl;
 		std::cout << "Excess beams will be ignored, missing beams will be set to 0." << std::endl;
 	}
 
-	for (int beam_idx = 0; beam_idx < N_BEAMS; beam_idx++){
+	for (int beam_idx = 0; beam_idx < expected_beams; beam_idx++){
 		input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
 		std::cout << "Read in: (" << dir[beam_idx].theta << ", " << dir[beam_idx].phi << ")" << std::endl;
 	}
@@ -338,7 +369,7 @@ void print_all_defines(void){
 	std::cout << "SIG_BITS:" << SIG_BITS << "\n";
 	std::cout << "SIG_MAX_VAL:" << SIG_MAX_VAL << "\n";
 	std::cout << "N_STREAMS:" << N_STREAMS << "\n";
-	std::cout << "N_DIRS:" << N_DIRS << "\n";
+	std::cout << "N_PT_SOURCES:" << N_PT_SOURCES << "\n";
 
 	std::cout << std::endl;
 }

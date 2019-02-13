@@ -455,7 +455,7 @@ int main(int argc, char *argv[]){
 				/***********************************
 				 GENERATE TEST SIGNAL			   
 				 ***********************************/
-				if (use_source_catalog && (blocks_transfer_queue >= (source_batch_counter * N_SOURCES_PER_BATCH)/ N_GEMMS_PER_BLOCK) ){
+				if (use_source_catalog && (blocks_transferred >= (source_batch_counter * N_SOURCES_PER_BATCH)/ N_GEMMS_PER_BLOCK) ){
 					//Generates the dummy data given a set of directions.
 					std::cout << "Generating new source data" << std::endl;
 					generate_1D_test_data(data, sources, pos, gpu, B_stride, source_batch_counter);
@@ -463,11 +463,12 @@ int main(int argc, char *argv[]){
 					if (source_batch_counter == N_SOURCE_BATCHES){
 						std::cout << "Program should be over soon" << std::endl;
 					}
+					std::cout << "done generating test data" << std::endl;
 				}
 
 				/* Copy Block */
 				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK*(blocks_transfer_queue%N_BLOCKS_on_GPU)], 
-											&data[N_BYTES_PER_BLOCK*blocks_transfer_queue],
+											&data[(N_BYTES_PER_BLOCK*blocks_transfer_queue)%INPUT_DATA_SIZE],
 											N_BYTES_PER_BLOCK, 
 											cudaMemcpyHostToDevice,
 											HtoDstream));

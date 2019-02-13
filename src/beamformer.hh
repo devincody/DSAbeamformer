@@ -226,7 +226,6 @@ void generate_1D_test_data(char *data, beam_direction sources[], antenna pos[], 
 	char high, low;
 	
 	for (long direction = 0; direction < N_SOURCES_PER_BATCH; direction++){
-		std::cout << "direction"
 		//test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_PT_SOURCES-1);
 
 		for (int i = 0; i < N_FREQUENCIES; i++){
@@ -236,8 +235,8 @@ void generate_1D_test_data(char *data, beam_direction sources[], antenna pos[], 
 			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
 				for (int k = 0; k < N_ANTENNAS; k++){
 					int source_look_up = direction + source_batch_counter*N_SOURCES_PER_BATCH;
-					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(sources[source_look_up].theta))/wavelength))); //real
-					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(sources[source_look_up].theta))/wavelength))); //imag
+					high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(sources[source_look_up].theta) + pos[k].y*sin(sources[source_look_up].phi) )/wavelength))); //real
+					low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(sources[source_look_up].theta) + pos[k].y*sin(sources[source_look_up].phi) )/wavelength))); //imag
 
 					data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 				}

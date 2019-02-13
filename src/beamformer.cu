@@ -433,7 +433,7 @@ int main(int argc, char *argv[]){
 			/* Header to be printed during every loop */
 			std::cout << "##########################################" << std::endl;
 			std::cout << "A: " << blocks_analyzed <<  ", AQ: " << blocks_analysis_queue << ", T: " << blocks_transferred << ", TQ: " << blocks_transfer_queue << std::endl;
-			std::cout << "current_gemm: " << current_gemm << "transfers_complete: " << transfers_complete << std::endl;
+			std::cout << "current_gemm: " << current_gemm << ", transfers_complete: " << transfers_complete << std::endl;
 		#endif 
 
 
@@ -471,6 +471,7 @@ int main(int argc, char *argv[]){
 				 Copy Block			   
 				 ***********************************/
 				if (blocks_transfer_queue < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) {
+					/* Only initiate transfers if there is valid data in data[] */
 					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK * (blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
 												&data[(N_BYTES_PER_BLOCK * blocks_transfer_queue) % INPUT_DATA_SIZE],
 												N_BYTES_PER_BLOCK, 
@@ -479,13 +480,16 @@ int main(int argc, char *argv[]){
 
 					/* Generate Cuda event which will indicate when the block has been transfered*/
 					gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (5* N_BLOCKS_ON_GPU)], HtoDstream));
-
 					blocks_transfer_queue++;
+				}
 
-					if (blocks_transfer_queue >= N_PT_SOURCES / N_GEMMS_PER_BLOCK){
-						/* Only initiate transfers if fewer than N_PT_SOURCES directions have been analyzed */
-						transfers_complete = 1;
-					}
+
+				/***********************************
+				 Check if transfers are done			   
+				 ***********************************/
+				if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES){
+					/* If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop */
+					transfers_complete = 1;
 				}
 
 			#else

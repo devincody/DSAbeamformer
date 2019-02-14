@@ -208,13 +208,13 @@ public:
 
 		if (dada_hdu_connect(hdu_in) < 0){
 			printf ("Error: could not connect to dada buffer\n");
-			exit(-1) // return EXIT_FAILURE;		
+			exit(-1); // return EXIT_FAILURE;		
 		}
 
 		// lock read on buffer
 		if (dada_hdu_lock_read (hdu_in) < 0) {
 			printf ("Error: could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
-			exit(-1) // return EXIT_FAILURE;
+			exit(-1); // return EXIT_FAILURE;
 		}
 
 		// Bind to cpu core

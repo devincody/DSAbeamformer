@@ -120,6 +120,11 @@ int main(int argc, char *argv[]){
 	}
 	free(file_name);
 
+	#ifndef DEBUG
+		char name[] = "beam";
+		dada_handler dada_handle(name, core, in_key);
+	#endif
+
 	if (!pos_set){
 		/* Populate location/direction Matricies if they were not set by command-line arguments */
 		for (int i = 0; i < N_ANTENNAS; i++){
@@ -134,8 +139,7 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-	char name[] = "beam";
-	dada_handler dada_handle(name, core, in_key);
+
 
 	/***********************************
 	 *			GPU Variables		   *

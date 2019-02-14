@@ -179,7 +179,7 @@ int main(int argc, char *argv[]){
 	#if DEBUG
 		char *data;// = new char[INPUT_DATA_SIZE](); // storage for test signals
 		// gpuErrchk(cudaHostRegister(data, INPUT_DATA_SIZE*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
-		gpuErrchk(cudaHostAlloc(&data, INPUT_DATA_SIZE*sizeof(char), cudaHostRegisterPortable));
+		gpuErrchk(cudaHostAlloc(&data, INPUT_DATA_SIZE*sizeof(char)));
 
 		// set memory to zero if a source catalog wasn't provided
 		if (!use_source_catalog){
@@ -192,7 +192,7 @@ int main(int argc, char *argv[]){
 	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
 	float *beam_out;// = new float[N_F_PER_DETECT*N_STREAMS]();
 	// gpuErrchk(cudaHostRegister(beam_out, N_FREQUENCIES*N_BEAMS*N_OUTPUTS_PER_GEMM*N_STREAMS*sizeof(float), cudaHostRegisterPortable)); //need pinned memory
-	gpuErrchk(cudaHostAlloc(&beam_out, N_F_PER_DETECT*N_STREAMS*sizeof(float), cudaHostRegisterPortable));
+	gpuErrchk(cudaHostAlloc(&beam_out, N_F_PER_DETECT*N_STREAMS*sizeof(float)));
 
 
 	#if DEBUG
@@ -200,7 +200,7 @@ int main(int argc, char *argv[]){
 		float *d_dedispersed;	// Data after being de-dispersed
 		float *out_dedispersed;// = new float[N_BEAMS*N_PT_SOURCES]();
 		// gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_PT_SOURCES*sizeof(float), cudaHostRegisterPortable));
-		gpuErrchk(cudaHostAlloc(&data, N_BEAMS*N_PT_SOURCES*sizeof(float), cudaHostRegisterPortable));
+		gpuErrchk(cudaHostAlloc(&data, N_BEAMS*N_PT_SOURCES*sizeof(float)));
 
 		float *d_vec_ones;		
 		float *vec_ones = new float[N_FREQUENCIES]; 
@@ -361,6 +361,8 @@ int main(int argc, char *argv[]){
 	#if DEBUG
 		START_TIMER();
 	#endif
+
+	gpuErrchk(cudaDeviceSynchronize());
 
 	while (!observation_complete){
 		

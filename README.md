@@ -128,7 +128,11 @@ Lastly, we also define a condition for ending the observation -- namely if there
 
 ## Running the code
 
-A makefile is provided to facilitate compilation. There are two options which can be used: `make verbose` and `make debug` which optionally toggle print statements and debugging utilities respectively.
+There are several steps required to get the beamformer running.
+
+### Compilation and allocation of dada buffers
+
+A makefile is provided to facilitate compilation. There are two options which can be used: `make verbose` and `make debug`. `make verbose` toggles print statements while `make debug` allows the user to input fake data which can be used to debug the system. 
 
 Generally, the template for preparing the system for execution is:
 
@@ -145,9 +149,11 @@ dada_db -k baab -n 8 -b 268435456 -l -p # create new dada buffer
 ```
 The above commands are included in a bash script in `util/exe.sh`.
 
+### Starting the system with psrdada (not debug mode)
+
 The following template starts the system:
 ``` bash
-bin/beam -k <buffer name> -c <cpu number> -g <gpu number>
+bin/beam -k <buffer name> -c <cpu number> -g <gpu number> -p <position_filename> -d <direction_filename>
 dada_junkdb -c <cpu number> -z -k <buffer name> -r <buffer fill rate (MB/s)> -t <fill time (s)> <header>
 ```
 
@@ -156,7 +162,19 @@ For example:
 bin/beam -k baab -c 0 -g 0
 dada_junkdb -c 0 -z -k baab -r 4000 -t 10 lib/correlator_header_dsaX.txt
 ```
-Here, the first line starts the script and the second starts filling the dada buffer. Note that we include a correlation header in the `lib` folder.
+
+Here, the first line starts the script and the second starts filling the dada buffer. Note that we have included a correlation header in the `lib` folder and the make file will execute the above junkdb command as per the example by calling the pithy command:
+
+```bash
+make junk
+```
+
+### Starting the system in debug mode
+
+The following template starts the system:
+``` bash
+bin/beam -g <gpu number> -p <position_filename> -d <direction_filename> -s <source_filename>
+```
 
 ## Demonstration of Correctness
 This system was prototyped in python (see for example `Beamformer Theory.ipynb`). Program correctness is determined exclusively in relation to the python implementation. 

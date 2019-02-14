@@ -134,14 +134,14 @@ Generally, the template for preparing the system for execution is:
 
 ``` bash
 make #compile the code
-sudo dada_db -k <buffer name> -d # delete previous dada buffer
-sudo dada_db -k <buffer name> -n <number of blocks> -b <block size (bytes)> -l -p # create new dada buffer
+dada_db -k <buffer name> -d # delete previous dada buffer
+dada_db -k <buffer name> -n <number of blocks> -b <block size (bytes)> -l -p # create new dada buffer
 ```
 As a concrete example:
 ``` bash
 make #compile the code
-sudo dada_db -k baab -d # delete previous dada buffer
-sudo dada_db -k baab -n 8 -b 268435456 -l -p # create new dada buffer
+dada_db -k baab -d # delete previous dada buffer
+dada_db -k baab -n 8 -b 268435456 -l -p # create new dada buffer
 ```
 The above commands are included in a bash script in `util/exe.sh`.
 

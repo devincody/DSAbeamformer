@@ -143,10 +143,10 @@
 
 #if DEBUG
 	#define INPUT_DATA_SIZE (N_BYTES_PRE_EXPANSION_PER_GEMM*N_SOURCES_PER_BATCH)
+	static_assert(N_SOURCES_PER_BATCH%N_GEMMS_PER_BLOCK == 0, "N_SOURCES_PER_BATCH must be divisible by N_GEMMS_PER_BLOCK");
 #endif
 
 
-static_assert(N_SOURCES_PER_BATCH%N_GEMMS_PER_BLOCK == 0, "N_SOURCES_PER_BATCH must be divisible by N_GEMMS_PER_BLOCK");
 static_assert(N_BEAMS%(32/N_BITS) == 0, "N_BEAMS must be divisible by 4");
 static_assert(N_ANTENNAS%(32/N_BITS) == 0, "N_ANTENNAS must be divisible by 4");
 
@@ -166,7 +166,6 @@ class antenna{
 public:
 	float x, y, z;
 	antenna(){x = 0; y = 0; z = 0;}
-	~antenna(){}
 };
 
 class beam_direction{
@@ -175,8 +174,105 @@ public:
 	float theta, phi;
 	beam_direction(){theta = 0; phi = 0;}
 	beam_direction(float th, float ph) : theta(th), phi(ph) {}
-	~beam_direction(){}
 };
+
+
+
+#ifndef DEBUG
+
+	class dada_handler{
+	private:
+		multilog_t* log = 0;
+		dada_hdu_t* hdu_in = 0;
+		uint64_t header_size = 0;
+		uint64_t block_size = 0;
+		uint64_t block_id = 0;
+
+		void dsaX_dbgpu_cleanup(void);
+
+	public:
+		dada_handler(char * name, int core, key_t in_key);
+		void read_headers(void);
+		char* read(uint64_t *bytes_read);
+		void close(uint64_t bytes_read)
+	}
+
+
+	dada_handler::dada_handler(char * name, int core, key_t in_key){
+		this->log = multilog_open(name, 0);
+		multilog_add(this->log, stderr);
+		mutilog(this->log, LOG_INFO, "creating hdu\n");
+
+		this->hdu_in = dada_hdu_create(this->log);
+		dada_hdu_set_key(this->hdu_in, in_key);
+
+		if (dada_hdu_connect(this->hdu_in) < 0){
+			printf ("could not connect to dada buffer\n");
+			return EXIT_FAILURE;		
+		}
+
+		// lock read on buffer
+		if (dada_hdu_lock_read (this->hdu_in) < 0) {
+			printf ("could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
+			return EXIT_FAILURE;
+		}
+
+		// Bind to cpu core
+		if (core >= 0)
+		{
+			printf("binding to core %d\n", core);
+			if (dada_bind_thread_to_core(core) < 0)
+			printf("failed to bind to core %d\n", core);
+		}
+
+		#if VERBOSE
+			multilog (log, LOG_INFO, "Done setting up buffer\n");
+		#endif
+	}
+
+	void dada_handler::read_headers(){
+		char * header_in = ipcbuf_get_next_read (this->hdu_in->header_block, &(this->header_size));
+		if (!header_in)
+		{
+			multilog(this->log ,LOG_ERR, "main: could not read next header\n");
+			dsaX_dbgpu_cleanup();
+			return EXIT_FAILURE;
+		}
+
+		if (ipcbuf_mark_cleared (this->hdu_in->header_block) < 0)
+		{
+			multilog (this->log, LOG_ERR, "could not mark header block cleared\n");
+			dsaX_dbgpu_cleanup();
+			return EXIT_FAILURE;
+		}
+
+		// size of block in dada buffer
+		this->block_size = ipcbuf_get_bufsz ((ipcbuf_t *) this->hdu_in->data_block);
+
+		#if VERBOSE
+			multilog (log, LOG_INFO, "Done setting up header \n");
+		#endif
+		
+		std::cout << "block size is: " << this->block_size << std::endl;
+	}
+
+	char* dada_handler::read(uint64_t *bytes_read){
+		return ipcio_open_block_read(this->hdu_in->data_block, bytes_read, &this->block_id);
+	}
+
+	void dada_handler::close(uint64_t bytes_read){
+		ipcio_close_block_read (hdu_in->data_block, bytes_read);
+	}
+	
+	void dada_handler::dsaX_dbgpu_cleanup() {
+		/*cleanup as defined by dada example code */
+		if (dada_hdu_unlock_read (this->hdu_in) < 0){
+			multilog(this->log, LOG_ERR, "could not unlock read on hdu_in\n");
+		}
+		dada_hdu_destroy (this->hdu_in);
+	}
+
+#endif
 
 /***************************************************
 				DEFINED FUNCTIONS
@@ -210,16 +306,6 @@ void usage(){
 	   " -p position_filename  file where the antenna positions are stored\n"
 	   " -d direction_filename file where the beam directions are stored\n"
 	   " -h         print usage\n");
-}
-#endif
-
-#ifndef DEBUG
-/*cleanup as defined by dada example code */
-void dsaX_dbgpu_cleanup (dada_hdu_t * in,  multilog_t * log) {
-	if (dada_hdu_unlock_read (in) < 0){
-		multilog(log, LOG_ERR, "could not unlock read on hdu_in\n");
-	}
-	dada_hdu_destroy (in);
 }
 #endif
 

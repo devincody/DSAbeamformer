@@ -18,11 +18,8 @@ int main(int argc, char *argv[]){
 	DADA VARIABLES
 	***************************************************/
 	#ifndef DEBUG
-		dada_hdu_t* hdu_in = 0;
-		multilog_t* log = 0;
 		int core = 0;
 		key_t in_key = 0x0000dada;
-		uint64_t header_size = 0;
 	#endif
 
 	/***************************************************
@@ -136,6 +133,9 @@ int main(int argc, char *argv[]){
 			dir[i].theta = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
 		}
 	}
+
+	char name[] = "beam";
+	dada_handler dada_handle(name, core, in_key);
 
 	/***********************************
 	 *			GPU Variables		   *
@@ -327,6 +327,8 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		int current_gemm = 0;
+		uint64_t bytes_read = 0;
+		char *block;
 	#endif
 
 
@@ -336,72 +338,72 @@ int main(int argc, char *argv[]){
 	***************************************************/
 
 	#ifndef DEBUG
-		// DADA stuff
-		log = multilog_open ("beam", 0);
-		multilog_add (log, stderr);
-		multilog (log, LOG_INFO, "creating hdu\n");
+		dada_handle.read_headers();
+		// // DADA stuff
+		// log = multilog_open ("beam", 0);
+		// multilog_add (log, stderr);
+		// multilog (log, LOG_INFO, "creating hdu\n");
 
-		// create dada hdu
-		hdu_in	= dada_hdu_create (log);
-		// set the input hdu key
-		dada_hdu_set_key (hdu_in, in_key);
+		// // create dada hdu
+		// hdu_in	= dada_hdu_create (log);
+		// // set the input hdu key
+		// dada_hdu_set_key (hdu_in, in_key);
 
-		// connect to dada buffer
-		if (dada_hdu_connect (hdu_in) < 0) {
-			printf ("could not connect to dada buffer\n");
-			return EXIT_FAILURE;
-		}
+		// // connect to dada buffer
+		// if (dada_hdu_connect (hdu_in) < 0) {
+		// 	printf ("could not connect to dada buffer\n");
+		// 	return EXIT_FAILURE;
+		// }
 
-		// lock read on buffer
-		if (dada_hdu_lock_read (hdu_in) < 0) {
-			printf ("could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
-			return EXIT_FAILURE;
-		}
+		// // lock read on buffer
+		// if (dada_hdu_lock_read (hdu_in) < 0) {
+		// 	printf ("could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
+		// 	return EXIT_FAILURE;
+		// }
 
-		// Bind to cpu core
-		if (core >= 0)
-		{
-			printf("binding to core %d\n", core);
-			if (dada_bind_thread_to_core(core) < 0)
-			printf("failed to bind to core %d\n", core);
-		}
+		// // Bind to cpu core
+		// if (core >= 0)
+		// {
+		// 	printf("binding to core %d\n", core);
+		// 	if (dada_bind_thread_to_core(core) < 0)
+		// 	printf("failed to bind to core %d\n", core);
+		// }
 
-		#if VERBOSE
-			multilog (log, LOG_INFO, "Done setting up buffer\n");
-		#endif
-	#endif
+		// #if VERBOSE
+		// 	multilog (log, LOG_INFO, "Done setting up buffer\n");
+		// #endif
 
-	/***************************************************
-	Deal with Headers (FOR DADA)
-	***************************************************/
-	#ifndef DEBUG
-		/* read the headers from the input HDU and mark as cleared
-		   will block until header is present in dada ring buffer */
-		char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
-		if (!header_in)
-		{
-			multilog(log ,LOG_ERR, "main: could not read next header\n");
-			dsaX_dbgpu_cleanup (hdu_in, log);
-			return EXIT_FAILURE;
-		}
+		// **************************************************
+		// Deal with Headers (FOR DADA)
+		// **************************************************
 
-		if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
-		{
-			multilog (log, LOG_ERR, "could not mark header block cleared\n");
-			dsaX_dbgpu_cleanup (hdu_in, log);
-			return EXIT_FAILURE;
-		}
+		// /* read the headers from the input HDU and mark as cleared
+		//    will block until header is present in dada ring buffer */
+		// char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
+		// if (!header_in)
+		// {
+		// 	multilog(log ,LOG_ERR, "main: could not read next header\n");
+		// 	dsaX_dbgpu_cleanup (hdu_in, log);
+		// 	return EXIT_FAILURE;
+		// }
 
-		// size of block in dada buffer
-		uint64_t block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
-		uint64_t bytes_read = 0, block_id;
-		char *block;
+		// if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
+		// {
+		// 	multilog (log, LOG_ERR, "could not mark header block cleared\n");
+		// 	dsaX_dbgpu_cleanup (hdu_in, log);
+		// 	return EXIT_FAILURE;
+		// }
 
-		#if VERBOSE
-			multilog (log, LOG_INFO, "Done setting up header \n");
-		#endif
+		// // size of block in dada buffer
+		// uint64_t block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
+		// uint64_t block_id;
 		
-		std::cout << "block size is: " << block_size << std::endl;
+
+		// #if VERBOSE
+		// 	multilog (log, LOG_INFO, "Done setting up header \n");
+		// #endif
+		
+		// std::cout << "block size is: " << block_size << std::endl;
 	#endif
 
 
@@ -499,8 +501,11 @@ int main(int argc, char *argv[]){
 				#if VERBOSE
 					std::cout << "READING FROM PSRDADA" << std::endl;
 				#endif
-					
-				block = ipcio_open_block_read(hdu_in->data_block,&bytes_read, &block_id);
+				
+
+				block = dada_handle.read(&bytes_read);
+
+				// block = ipcio_open_block_read(hdu_in->data_block, &bytes_read, &block_id);
 
 				if (bytes_read != N_BYTES_PER_BLOCK){
 					std::cout << "ERROR: Async, Bytes Read: " << bytes_read << ", Should also be "<< N_BYTES_PER_BLOCK << std::endl;
@@ -512,7 +517,8 @@ int main(int argc, char *argv[]){
 					#if VERBOSE
 						std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
 					#endif
-					ipcio_close_block_read (hdu_in->data_block, bytes_read);
+					// ipcio_close_block_read (hdu_in->data_block, bytes_read);
+
 				}
 
 				/* Copy Block */
@@ -524,6 +530,7 @@ int main(int argc, char *argv[]){
 
 				/* Mark PSRDADA as read */
 				ipcio_close_block_read (hdu_in->data_block, bytes_read);
+				dada_handle.close(bytes_read);
 
 				/* Generate Cuda event which will indicate when the block has been transfered*/
 				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (5 * N_BLOCKS_ON_GPU)], HtoDstream));

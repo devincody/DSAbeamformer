@@ -195,31 +195,26 @@ public:
 		void read_headers(void);
 		char* read(uint64_t *bytes_read);
 		void close(uint64_t bytes_read);
-		uint64_t get_block_size();
+		uint64_t get_block_size(){return block_size;}
 	};
 
-	uint64_t get_block_size(){
-		return block_size;
-	}
-
-
 	dada_handler::dada_handler(char * name, int core, key_t in_key){
-		this->log = multilog_open(name, 0);
-		multilog_add(this->log, stderr);
-		mutilog(this->log, LOG_INFO, "creating hdu\n");
+		log = multilog_open(name, 0);
+		multilog_add(log, stderr);
+		multilog(log, LOG_INFO, "creating hdu\n");
 
-		this->hdu_in = dada_hdu_create(this->log);
-		dada_hdu_set_key(this->hdu_in, in_key);
+		hdu_in = dada_hdu_create(log);
+		dada_hdu_set_key(hdu_in, in_key);
 
-		if (dada_hdu_connect(this->hdu_in) < 0){
+		if (dada_hdu_connect(hdu_in) < 0){
 			printf ("Error: could not connect to dada buffer\n");
-			// return EXIT_FAILURE;		
+			exit(-1) // return EXIT_FAILURE;		
 		}
 
 		// lock read on buffer
-		if (dada_hdu_lock_read (this->hdu_in) < 0) {
+		if (dada_hdu_lock_read (hdu_in) < 0) {
 			printf ("Error: could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
-			// return EXIT_FAILURE;
+			exit(-1) // return EXIT_FAILURE;
 		}
 
 		// Bind to cpu core
@@ -235,35 +230,34 @@ public:
 		#endif
 	}
 
-	int dada_handler::read_headers(){
-		char * header_in = ipcbuf_get_next_read (this->hdu_in->header_block, &(this->header_size));
+	void dada_handler::read_headers(){
+		char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &(header_size));
 		if (!header_in)
 		{
-			multilog(this->log ,LOG_ERR, "main: could not read next header\n");
+			multilog(log ,LOG_ERR, "main: could not read next header\n");
 			dsaX_dbgpu_cleanup();
-			return EXIT_FAILURE;
+			exit(-1);
 		}
 
-		if (ipcbuf_mark_cleared (this->hdu_in->header_block) < 0)
+		if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
 		{
-			multilog (this->log, LOG_ERR, "could not mark header block cleared\n");
+			multilog (log, LOG_ERR, "could not mark header block cleared\n");
 			dsaX_dbgpu_cleanup();
-			return EXIT_FAILURE;
+			exit(-1);
 		}
 
 		// size of block in dada buffer
-		this->block_size = ipcbuf_get_bufsz ((ipcbuf_t *) this->hdu_in->data_block);
+		block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
 
 		#if VERBOSE
 			multilog (log, LOG_INFO, "Done setting up header \n");
 		#endif
 		
-		std::cout << "block size is: " << this->block_size << std::endl;
-		return 0;
+		std::cout << "block size is: " << block_size << std::endl;
 	}
 
 	char* dada_handler::read(uint64_t *bytes_read){
-		return ipcio_open_block_read(this->hdu_in->data_block, bytes_read, &this->block_id);
+		return ipcio_open_block_read(hdu_in->data_block, bytes_read, &block_id);
 	}
 
 	void dada_handler::close(uint64_t bytes_read){
@@ -272,10 +266,10 @@ public:
 	
 	void dada_handler::dsaX_dbgpu_cleanup() {
 		/*cleanup as defined by dada example code */
-		if (dada_hdu_unlock_read (this->hdu_in) < 0){
-			multilog(this->log, LOG_ERR, "could not unlock read on hdu_in\n");
+		if (dada_hdu_unlock_read (hdu_in) < 0){
+			multilog(log, LOG_ERR, "could not unlock read on hdu_in\n");
 		}
-		dada_hdu_destroy (this->hdu_in);
+		dada_hdu_destroy (hdu_in);
 	}
 
 #endif

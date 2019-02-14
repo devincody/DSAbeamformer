@@ -669,7 +669,7 @@ int main(int argc, char *argv[]){
 	delete[] A;
 	delete[] pos;
 	delete[] dir;
-	delete[] beam_out;
+	// delete[] beam_out;
 
 	#if DEBUG
 		// gpuErrchk(cudaHostUnregister(data));
@@ -677,9 +677,9 @@ int main(int argc, char *argv[]){
 		gpuErrchk(cudaFreeHost(data));
 		gpuErrchk(cudaFreeHost(out_dedispersed));
 
-		delete[] data;
+		// delete[] data;
 		delete[] vec_ones;
-		delete[] out_dedispersed;
+		// delete[] out_dedispersed;
 	#endif
 
 	std::cout << "Freed CPU memory" << std::endl;

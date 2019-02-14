@@ -327,8 +327,6 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		int current_gemm = 0;
-		uint64_t bytes_read = 0;
-		char *block;
 	#endif
 
 
@@ -338,7 +336,10 @@ int main(int argc, char *argv[]){
 	***************************************************/
 
 	#ifndef DEBUG
+		uint64_t bytes_read = 0;
+		char *block;
 		dada_handle.read_headers();
+		uint64_t block_size = dada_handle.get_block_size();
 		// // DADA stuff
 		// log = multilog_open ("beam", 0);
 		// multilog_add (log, stderr);
@@ -529,7 +530,7 @@ int main(int argc, char *argv[]){
 											HtoDstream));
 
 				/* Mark PSRDADA as read */
-				ipcio_close_block_read (hdu_in->data_block, bytes_read);
+				// ipcio_close_block_read (hdu_in->data_block, bytes_read);
 				dada_handle.close(bytes_read);
 
 				/* Generate Cuda event which will indicate when the block has been transfered*/

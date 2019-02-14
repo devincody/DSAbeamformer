@@ -194,7 +194,12 @@ public:
 		dada_handler(char * name, int core, key_t in_key);
 		void read_headers(void);
 		char* read(uint64_t *bytes_read);
-		void close(uint64_t bytes_read)
+		void close(uint64_t bytes_read);
+		uint64_t get_block_size();
+	};
+
+	uint64_t get_block_size(){
+		return block_size;
 	}
 
 
@@ -207,14 +212,14 @@ public:
 		dada_hdu_set_key(this->hdu_in, in_key);
 
 		if (dada_hdu_connect(this->hdu_in) < 0){
-			printf ("could not connect to dada buffer\n");
-			return EXIT_FAILURE;		
+			printf ("Error: could not connect to dada buffer\n");
+			// return EXIT_FAILURE;		
 		}
 
 		// lock read on buffer
 		if (dada_hdu_lock_read (this->hdu_in) < 0) {
-			printf ("could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
-			return EXIT_FAILURE;
+			printf ("Error: could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
+			// return EXIT_FAILURE;
 		}
 
 		// Bind to cpu core
@@ -230,7 +235,7 @@ public:
 		#endif
 	}
 
-	void dada_handler::read_headers(){
+	int dada_handler::read_headers(){
 		char * header_in = ipcbuf_get_next_read (this->hdu_in->header_block, &(this->header_size));
 		if (!header_in)
 		{
@@ -254,6 +259,7 @@ public:
 		#endif
 		
 		std::cout << "block size is: " << this->block_size << std::endl;
+		return 0;
 	}
 
 	char* dada_handler::read(uint64_t *bytes_read){

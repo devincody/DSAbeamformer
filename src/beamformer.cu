@@ -344,75 +344,7 @@ int main(int argc, char *argv[]){
 		char *block;
 		dada_handle.read_headers();
 		uint64_t block_size = dada_handle.get_block_size();
-		// // DADA stuff
-		// log = multilog_open ("beam", 0);
-		// multilog_add (log, stderr);
-		// multilog (log, LOG_INFO, "creating hdu\n");
-
-		// // create dada hdu
-		// hdu_in	= dada_hdu_create (log);
-		// // set the input hdu key
-		// dada_hdu_set_key (hdu_in, in_key);
-
-		// // connect to dada buffer
-		// if (dada_hdu_connect (hdu_in) < 0) {
-		// 	printf ("could not connect to dada buffer\n");
-		// 	return EXIT_FAILURE;
-		// }
-
-		// // lock read on buffer
-		// if (dada_hdu_lock_read (hdu_in) < 0) {
-		// 	printf ("could not lock to dada buffer (try relaxing memlock limits in /etc/security/limits.conf)\n");
-		// 	return EXIT_FAILURE;
-		// }
-
-		// // Bind to cpu core
-		// if (core >= 0)
-		// {
-		// 	printf("binding to core %d\n", core);
-		// 	if (dada_bind_thread_to_core(core) < 0)
-		// 	printf("failed to bind to core %d\n", core);
-		// }
-
-		// #if VERBOSE
-		// 	multilog (log, LOG_INFO, "Done setting up buffer\n");
-		// #endif
-
-		// **************************************************
-		// Deal with Headers (FOR DADA)
-		// **************************************************
-
-		// /* read the headers from the input HDU and mark as cleared
-		//    will block until header is present in dada ring buffer */
-		// char * header_in = ipcbuf_get_next_read (hdu_in->header_block, &header_size);
-		// if (!header_in)
-		// {
-		// 	multilog(log ,LOG_ERR, "main: could not read next header\n");
-		// 	dsaX_dbgpu_cleanup (hdu_in, log);
-		// 	return EXIT_FAILURE;
-		// }
-
-		// if (ipcbuf_mark_cleared (hdu_in->header_block) < 0)
-		// {
-		// 	multilog (log, LOG_ERR, "could not mark header block cleared\n");
-		// 	dsaX_dbgpu_cleanup (hdu_in, log);
-		// 	return EXIT_FAILURE;
-		// }
-
-		// // size of block in dada buffer
-		// uint64_t block_size = ipcbuf_get_bufsz ((ipcbuf_t *) hdu_in->data_block);
-		// uint64_t block_id;
-		
-
-		// #if VERBOSE
-		// 	multilog (log, LOG_INFO, "Done setting up header \n");
-		// #endif
-		
-		// std::cout << "block size is: " << block_size << std::endl;
 	#endif
-
-
-
 
 
 	/*********************************************************************************

@@ -30,6 +30,7 @@
 	#include "dada_client.h"
 	#include "dada_def.h"
 	#include "dada_hdu.h"
+	#include "dada_cuda.h" //pinning memory
 	#include "multilog.h"
 	#include "ipcio.h"
 	#include "ipcbuf.h"
@@ -196,6 +197,7 @@ public:
 
 	public:
 		dada_handler(char * name, int core, key_t in_key);
+		~dada_handler();
 		void read_headers(void);
 		char* read(uint64_t *bytes_read);
 		void close(uint64_t bytes_read);
@@ -221,6 +223,11 @@ public:
 			exit(-1); // return EXIT_FAILURE;
 		}
 
+		if (dada_cuda_dbregister(hdu_in) < 0){
+			printf ("Error: could not pin dada buffer\n");
+			exit(-1); 
+		}
+
 		// Bind to cpu core
 		if (core >= 0)
 		{
@@ -232,6 +239,10 @@ public:
 		#if VERBOSE
 			multilog (log, LOG_INFO, "Done setting up buffer\n");
 		#endif
+	}
+
+	dada_handler::~dada_handler(){
+		dada_cuda_dbunregister(hdu_in);
 	}
 
 	void dada_handler::read_headers(){

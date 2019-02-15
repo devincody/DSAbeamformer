@@ -192,7 +192,7 @@ int main(int argc, char *argv[]){
 	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
 	float *beam_out;// = new float[N_F_PER_DETECT*N_STREAMS]();
 	// gpuErrchk(cudaHostRegister(beam_out, N_FREQUENCIES*N_BEAMS*N_OUTPUTS_PER_GEMM*N_STREAMS*sizeof(float), cudaHostRegisterPortable)); //need pinned memory
-	gpuErrchk(cudaHostAlloc( (void**) &beam_out, N_F_PER_DETECT*N_STREAMS*sizeof(float)));
+	gpuErrchk(cudaHostAlloc( &beam_out, N_F_PER_DETECT*N_STREAMS*sizeof(float), 0));
 
 
 	#if DEBUG

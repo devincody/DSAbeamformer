@@ -183,7 +183,69 @@ public:
 
 
 
+
+
+
 #ifndef DEBUG
+/*! register the data_block in the hdu via cudaHostRegister */
+int dada_cuda_dbregister (dada_hdu_t * hdu)
+{
+  ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
+
+  // ensure that the data blocks are SHM locked
+  if (ipcbuf_lock (db) < 0)
+  {
+    perror("dada_dbregister: ipcbuf_lock failed\n");
+    return -1;
+  }
+
+  // dont register buffers if they reside on the device
+  if (ipcbuf_get_device(db) >= 0)
+    return 0;
+
+  size_t bufsz = db->sync->bufsz;
+  unsigned int flags = 0;
+  cudaError_t rval;
+
+  // lock each data block buffer as cuda memory
+  uint64_t ibuf;
+  for (ibuf = 0; ibuf < db->sync->nbufs; ibuf++)
+  {
+    rval = cudaHostRegister ((void *) db->buffer[ibuf], bufsz, flags);
+    if (rval != cudaSuccess)
+    {
+      perror("dada_dbregister:  cudaHostRegister failed\n");
+      return -1;
+    }
+  }
+  return 0;
+}
+
+/*! unregister the data_block in the hdu via cudaHostUnRegister */
+int dada_cuda_dbunregister (dada_hdu_t * hdu)
+{
+  ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
+  cudaError_t error_id;
+
+  // dont unregister buffers if they reside on the device
+  if (ipcbuf_get_device(db) >= 0)
+    return 0;
+
+  // lock each data block buffer as cuda memory
+  uint64_t ibuf;
+  for (ibuf = 0; ibuf < db->sync->nbufs; ibuf++)
+  {
+    error_id = cudaHostUnregister ((void *) db->buffer[ibuf]);
+    if (error_id != cudaSuccess)
+    {
+      fprintf (stderr, "dada_dbunregister: cudaHostUnregister failed: %s\n",
+               cudaGetErrorString(error_id));
+      return -1;
+    }
+  }
+
+  return 0;
+}
 
 	class dada_handler{
 	private:

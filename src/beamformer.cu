@@ -1,5 +1,5 @@
-#include "beamformer.hh" // non-cuda header file
-#include "beamformer.cuh"// cuda header file
+#include "beamformer.hh" 	// non-cuda header file
+#include "beamformer.cuh"	// cuda header file
 
 
 int main(int argc, char *argv[]){
@@ -34,11 +34,13 @@ int main(int argc, char *argv[]){
 
 	int arg = 0;
 	int gpu = 0;
+
 	#ifndef DEBUG
 		/* DADA VARIABLES */
 		int core = 0;
 		key_t in_key = 0x0000dada;
 	#endif
+
 	char* file_name = (char *) calloc(256, sizeof(char));
 	while ((arg=getopt(argc, argv, legal_commandline_options)) != -1) {
 		switch (arg) {
@@ -156,10 +158,15 @@ int main(int argc, char *argv[]){
 	char *d_data;				// Raw input data (Before data massaging)
 	cuComplex *d_C;				// Beamformed output (N_BEAMS X N_TIMESTEPS_PER_GEMM, for N_FREQUENCIES)
 	float *d_out;				// Data after being averaged over 16 time samples and 2 polarizations
+	float *d_dedispersed;		// Data after being de-dispersed
+	
+	#if DEBUG
+		float *d_vec_ones;		// Vectors of all ones for de-dispersion
+	#endif
 
-	/* CUBLAS Constants */
-	cuComplex  h_inv_max_value,  h_zero; 		//Host Values
-	cuComplex *d_inv_max_value, *d_zero; 	//Device Values
+	/* CUBLAS Constants (and host variables for transfering to GPU) */
+	cuComplex  h_inv_max_value,  h_zero; 		// Host Values
+	cuComplex *d_inv_max_value, *d_zero; 		// Device Values
 
 	h_inv_max_value.x = 1.0/MAX_VAL;
 	h_inv_max_value.y = 0;
@@ -167,8 +174,8 @@ int main(int argc, char *argv[]){
 	h_zero.y = 0;
 
 	#if DEBUG
-		float  h_f_one,  h_f_zero;				//Host Values
-		float *d_f_one, *d_f_zero;				//Device Values	
+		float  h_f_one,  h_f_zero;				// Host Values
+		float *d_f_one, *d_f_zero;				// Device Values	
 		h_f_one = 1.0;
 		h_f_zero = 0.0;
 	#endif
@@ -177,34 +184,22 @@ int main(int argc, char *argv[]){
 	 *			HOST Variables		   *
 	 ***********************************/
 	#if DEBUG
-		char *data;// = new char[INPUT_DATA_SIZE](); // storage for test signals
-		// gpuErrchk(cudaHostRegister(data, INPUT_DATA_SIZE*sizeof(char), cudaHostRegisterPortable)); //need pinned memory
+		char *data; 									// Input data for test cases need pinned memory
+		float *dedispersed_out;							// Ouput data for dedispersed data (DM = 0)
+		float *vec_ones = new float[N_FREQUENCIES]; 	// A vector of all ones for dedispersion (frequency averaging)
+
 		gpuErrchk(cudaHostAlloc( (void**) &data, INPUT_DATA_SIZE*sizeof(char)));
+		gpuErrchk(cudaHostAlloc( (void**) &dedispersed_out, N_BEAMS*N_PT_SOURCES*sizeof(float)));
 
-		// set memory to zero if a source catalog wasn't provided
+		
 		if (!use_source_catalog){
-			/* Generates Bogus data, typically 0x70 */
-			memset(data, BOGUS_DATA, INPUT_DATA_SIZE*sizeof(char));
-			std::cout << "BOGUS DATA " << std::endl;
+			/* set memory to zero if a source catalog wasn't provided */
+			memset(data, BOGUS_DATA, INPUT_DATA_SIZE*sizeof(char)); // Generates Bogus data, typically 0x70
+			std::cout << "Using BOGUS DATA " << std::endl;
 		}
-	#endif
 
-	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
-	float *beam_out;// = new float[N_F_PER_DETECT*N_STREAMS]();
-	// gpuErrchk(cudaHostRegister(beam_out, N_FREQUENCIES*N_BEAMS*N_OUTPUTS_PER_GEMM*N_STREAMS*sizeof(float), cudaHostRegisterPortable)); //need pinned memory
-	gpuErrchk(cudaHostAlloc( &beam_out, N_F_PER_DETECT*N_STREAMS*sizeof(float), 0));
-
-
-	#if DEBUG
-		/* Vectors of all ones for de-dispersion */
-		float *d_dedispersed;	// Data after being de-dispersed
-		float *out_dedispersed;// = new float[N_BEAMS*N_PT_SOURCES]();
-		// gpuErrchk(cudaHostRegister(out_dedispersed, N_BEAMS*N_PT_SOURCES*sizeof(float), cudaHostRegisterPortable));
-		gpuErrchk(cudaHostAlloc( (void**) &data, N_BEAMS*N_PT_SOURCES*sizeof(float)));
-
-		float *d_vec_ones;		
-		float *vec_ones = new float[N_FREQUENCIES]; 
 		for (int i = 0; i < N_FREQUENCIES; i++){
+			/* Set data for a vector of all ones */
 			vec_ones[i] = 1.0;
 		}
 	#endif
@@ -213,6 +208,7 @@ int main(int argc, char *argv[]){
 	/***********************************
 	 *		Fourier Coefficients 	   *
 	 ***********************************/
+	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
 
 	for (int i = 0; i < N_FREQUENCIES; i++){
 		float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*bw_per_channel;
@@ -229,6 +225,10 @@ int main(int argc, char *argv[]){
 	/***********************************
 	 *			Memory Allocation 	   *
 	 ***********************************/
+	float *beam_out; // Final Data product location
+
+	gpuErrchk(cudaHostAlloc( &beam_out, N_F_PER_DETECT*N_STREAMS*sizeof(float), 0));
+
 	gpuErrchk(cudaMalloc(&d_A, 		A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_B, 		N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_C, 		N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
@@ -360,6 +360,13 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		START_TIMER();
+	#endif
+
+	#if BURNIN
+		for (int i = 0; i < BURNIN; i++){
+			dada_handle.read(&bytes_read);
+			dada_handle.close(bytes_read);
+		}
 	#endif
 
 	gpuErrchk(cudaDeviceSynchronize());
@@ -550,7 +557,7 @@ int main(int argc, char *argv[]){
 										&d_dedispersed[st*N_BEAMS], 1));
 
 							/* Copy Frequency-averaged data back to CPU */
-							gpuErrchk(cudaMemcpyAsync(&out_dedispersed[current_gemm * N_BEAMS], 
+							gpuErrchk(cudaMemcpyAsync(&dedispersed_out[current_gemm * N_BEAMS], 
 													  &d_dedispersed[st * N_BEAMS], N_BEAMS * sizeof(float), 
 													  cudaMemcpyDeviceToHost,
 													  stream[st]));
@@ -629,7 +636,7 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		char filename[] = "bin/data.py";
-		write_array_to_disk_as_python_file(out_dedispersed, N_PT_SOURCES, N_BEAMS, filename);
+		write_array_to_disk_as_python_file(dedispersed_out, N_PT_SOURCES, N_BEAMS, filename);
 	#endif
 
 	std::cout << "Freeing CUDA Structures" << std::endl;
@@ -675,13 +682,13 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		// gpuErrchk(cudaHostUnregister(data));
-		// gpuErrchk(cudaHostUnregister(out_dedispersed));
+		// gpuErrchk(cudaHostUnregister(dedispersed_out));
 		gpuErrchk(cudaFreeHost(data));
-		gpuErrchk(cudaFreeHost(out_dedispersed));
+		gpuErrchk(cudaFreeHost(dedispersed_out));
 
 		// delete[] data;
 		delete[] vec_ones;
-		// delete[] out_dedispersed;
+		// delete[] dedispersed_out;
 	#endif
 
 	std::cout << "Freed CPU memory" << std::endl;

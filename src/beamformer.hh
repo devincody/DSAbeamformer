@@ -319,7 +319,7 @@ std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
 		void read_headers(void);
 		char* read();
 		void close();
-		bool check_transfers_complete();
+		bool check_transfers_complete(bool * transfers_complete);
 		uint64_t get_block_size(){return block_size;}
 		uint64_t get_bytes_read(){return bytes_read;}
 	};

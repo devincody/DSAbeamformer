@@ -336,7 +336,7 @@ int main(int argc, char *argv[]){
 	***************************************************/
 
 	#ifndef DEBUG
-		uint64_t bytes_read = 0;
+		// uint64_t bytes_read = 0;
 		char *block;
 		dada_handle.read_headers();
 		uint64_t block_size = dada_handle.get_block_size();
@@ -346,8 +346,8 @@ int main(int argc, char *argv[]){
 	/*********************************************************************************
 	START OBSERVATION LOOP
 	*********************************************************************************/
-	int observation_complete = 0;
-	int transfers_complete = 0;
+	bool observation_complete = false;
+	bool transfers_complete = false;
 	#if DEBUG
 		int source_batch_counter = 0;
 	#endif
@@ -432,7 +432,7 @@ int main(int argc, char *argv[]){
 				 ***********************************/
 				if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES){
 					/* If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop */
-					transfers_complete = 1;
+					transfers_complete = true;
 				}
 
 			#else
@@ -448,19 +448,20 @@ int main(int argc, char *argv[]){
 
 				// block = ipcio_open_block_read(hdu_in->data_block, &bytes_read, &block_id);
 
-				if (bytes_read != N_BYTES_PER_BLOCK){
-					std::cout << "ERROR: Async, Bytes Read: " << bytes_read << ", Should also be "<< N_BYTES_PER_BLOCK << std::endl;
-				}
+				// if (bytes_read != N_BYTES_PER_BLOCK){
+				// 	std::cout << "ERROR: Async, Bytes Read: " << bytes_read << ", Should also be "<< N_BYTES_PER_BLOCK << std::endl;
+				// }
 
-				if (bytes_read < block_size){
-					/* If there isn't enough data in the block, end the observation */
-					transfers_complete = 1;
-					#if VERBOSE
-						std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
-					#endif
-					dada_handle.close();
+				// if (bytes_read < block_size){
+				// 	 If there isn't enough data in the block, end the observation 
+				// 	transfers_complete = true;
+				// 	#if VERBOSE
+				// 		std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
+				// 	#endif
+				// 	dada_handle.close();
 
-				} else {
+				// } else 
+				if (!dada_handle.check_transfers_complete(&transfers_complete)){
 					/* Copy Block */
 					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK * (blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
 												block,
@@ -602,13 +603,13 @@ int main(int argc, char *argv[]){
 		**************************************************/
 		#if DEBUG
 			if ((current_gemm >= N_PT_SOURCES-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
-				observation_complete = 1;
+				observation_complete = true;
 				std::cout << "obs Complete" << std::endl;
 				break;
 			}
 		#else
 			if ((blocks_analyzed == blocks_transfer_queue) && transfers_complete){
-				observation_complete = 1;
+				observation_complete = true;
 				std::cout << "obs Complete" << std::endl;
 				break;
 			}

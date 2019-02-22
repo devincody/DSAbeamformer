@@ -237,8 +237,8 @@ bool observation_loop_state::check_transfers_complete() {
 
 std::ostream & operator << (std::ostream &out, const observation_loop_state &a) {
 	return out << "A: " << a.blocks_analyzed <<  ", AQ: " << a.blocks_analysis_queue << ", T: " << a.blocks_transferred 
-			<< ", TQ: " << a.blocks_transfer_queue << "\n" << "current_gemm: " << current_gemm 
-			<< ", transfers_complete: " << transfers_complete;
+			<< ", TQ: " << a.blocks_transfer_queue << "\n" << "current_gemm: " << a.most_recent_gemm
+			<< ", transfers_complete: " << a.transfers_complete;
 }
 
 

@@ -468,7 +468,7 @@ int main(int argc, char *argv[]){
 
 				// } else 
 				if (!dada_handle.check_transfers_complete()){
-					obs_state.set_transfers_complete(true);
+					
 					/* Copy Block */
 					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_next_gpu_transfer_block()],//(blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
 												block,
@@ -484,7 +484,9 @@ int main(int argc, char *argv[]){
 					// gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (N_EVENTS_ON_GPU)], HtoDstream));
 					// blocks_transfer_queue++;
 					obs_state.generate_transfer_event(HtoDstream);
-					
+				} else {
+					obs_state.set_transfers_complete(true);
+					dada_handle.close();
 				}
 
 			#endif
@@ -522,7 +524,7 @@ int main(int argc, char *argv[]){
 				/* Call routine once per each GEMM in a BLOCK */
 
 				#if VERBOSE
-					std::cout << "Queueing Beamforming. Analyzed = Start Dir = " << obs_state.get_current_analysis_gemm(timeSlice[0]) << std::endl; 
+					std::cout << "Queueing Beamforming. Start Dir = " << obs_state.get_current_analysis_gemm(timeSlice[0]) << std::endl; 
 				#endif
 
 				for (int st = 0; st < N_STREAMS; st++){

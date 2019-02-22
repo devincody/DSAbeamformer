@@ -51,6 +51,8 @@
 			    DSA Constants
 ***************************************************/
 
+#define BURNIN 25
+
 #define N_BEAMS 256
 #define N_ANTENNAS 64
 #define N_FREQUENCIES 256

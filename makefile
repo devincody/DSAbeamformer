@@ -27,7 +27,8 @@ beam: $(SRCDIR)/beamformer.cu
 
 .PHONY: clean
 clean:
-	rm bin/beam; \
-	kill -9 $(ps aux | grep -e bin/beam | awk '{print $2}'); \
-	dada_db -k baab -d;\
-	dada_db -d ;
+	rm bin/beam;
+	dada_db -k baab -d;
+	dada_db -d;
+	kill -9 $(ps aux | grep -e bin/beam | awk '{print $2}');
+

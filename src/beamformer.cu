@@ -364,6 +364,7 @@ int main(int argc, char *argv[]){
 			dada_handle.read();
 			dada_handle.close();
 		}
+		std::cout << "Done Burn in" << std::endl;
 	#endif
 
 	#if DEBUG || VERBOSE
@@ -633,7 +634,7 @@ int main(int argc, char *argv[]){
 			std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 			std::cout << "Code produced outputs for " << N_GEMMS_PER_BLOCK*blocks_transfer_queue*N_OUTPUTS_PER_GEMM << " data chunks.\n";
 			std::cout << "Time per data chunk: " << observation_time_ms/(N_GEMMS_PER_BLOCK*blocks_transfer_queue*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
-			std::cout << "Approximate datarate: " << dada_handler.get_block_size()*blocks_transfer_queue/observation_time_ms/1e6 << "GB/s" << std::endl;
+			std::cout << "Approximate datarate: " << dada_handle.get_block_size()*blocks_transfer_queue/observation_time_ms/1e6 << "GB/s" << std::endl;
 
 		#endif
 	#endif

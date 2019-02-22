@@ -360,8 +360,8 @@ int main(int argc, char *argv[]){
 
 	#if BURNIN && DEBUG
 		for (int i = 0; i < BURNIN; i++){
-			dada_handle.read(&bytes_read);
-			dada_handle.close(bytes_read);
+			dada_handle.read();
+			dada_handle.close();
 		}
 	#endif
 
@@ -444,7 +444,7 @@ int main(int argc, char *argv[]){
 				#endif
 				
 
-				block = dada_handle.read(&bytes_read);
+				block = dada_handle.read();
 
 				// block = ipcio_open_block_read(hdu_in->data_block, &bytes_read, &block_id);
 

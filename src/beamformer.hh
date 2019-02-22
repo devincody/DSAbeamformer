@@ -274,7 +274,6 @@ bool observation_loop_state::check_observations_complete(int current_gemm){
 }
 
 bool observation_loop_state::check_transfers_complete(){
-#if DEBUG
 	if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES){
 		/* If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop */
 		transfers_complete = 1;
@@ -282,20 +281,6 @@ bool observation_loop_state::check_transfers_complete(){
 	} else {
 		return false;
 	}
-#else
-	if (bytes_read < block_size){
-		/* If there isn't enough data in the block, end the observation */
-		transfers_complete = 1;
-		#if VERBOSE
-			std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
-		#endif
-		// ipcio_close_block_read (hdu_in->data_block, bytes_read);
-		return true;
-
-	} else {
-		return false;
-	}
-#endif
 }
 
 std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
@@ -315,6 +300,7 @@ std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
 		dada_hdu_t* hdu_in = 0;
 		uint64_t header_size = 0;
 		uint64_t block_size = 0;
+		uint64_t bytes_read = 0;
 		uint64_t block_id = 0;
 
 		void dsaX_dbgpu_cleanup(void);
@@ -327,7 +313,9 @@ std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
 		void read_headers(void);
 		char* read(uint64_t *bytes_read);
 		void close(uint64_t bytes_read);
+		bool check_transfers_complete();
 		uint64_t get_block_size(){return block_size;}
+		uint64_t get_bytes_read(){return bytes_read;}
 	};
 
 	dada_handler::dada_handler(char * name, int core, key_t in_key){
@@ -397,14 +385,29 @@ std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
 		std::cout << "block size is: " << block_size << std::endl;
 	}
 
-	char* dada_handler::read(uint64_t *bytes_read){
-		return ipcio_open_block_read(hdu_in->data_block, bytes_read, &block_id);
+	char* dada_handler::read(){
+		return ipcio_open_block_read(hdu_in->data_block, &bytes_read, &block_id);
 	}
 
-	void dada_handler::close(uint64_t bytes_read){
+	void dada_handler::close(){
 		ipcio_close_block_read (hdu_in->data_block, bytes_read);
 	}
 	
+	bool dada_handler::check_transfers_complete(){
+		if (bytes_read < block_size){
+			/* If there isn't enough data in the block, end the observation */
+			transfers_complete = 1;
+			#if VERBOSE
+				std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
+			#endif
+			// ipcio_close_block_read (hdu_in->data_block, bytes_read);
+			return true;
+
+		} else {
+			return false;
+		}
+	}
+
 	void dada_handler::dsaX_dbgpu_cleanup() {
 		/*cleanup as defined by dada example code */
 		if (dada_hdu_unlock_read (hdu_in) < 0){

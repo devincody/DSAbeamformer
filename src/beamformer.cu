@@ -158,10 +158,10 @@ int main(int argc, char *argv[]){
 	char *d_data;				// Raw input data (Before data massaging)
 	cuComplex *d_C;				// Beamformed output (N_BEAMS X N_TIMESTEPS_PER_GEMM, for N_FREQUENCIES)
 	float *d_out;				// Data after being averaged over 16 time samples and 2 polarizations
-	float *d_dedispersed;		// Data after being de-dispersed
 	
 	#if DEBUG
 		float *d_vec_ones;		// Vectors of all ones for de-dispersion
+		float *d_dedispersed;	// Data after being de-dispersed
 	#endif
 
 	/* CUBLAS Constants (and host variables for transfering to GPU) */
@@ -188,8 +188,8 @@ int main(int argc, char *argv[]){
 		float *dedispersed_out;							// Ouput data for dedispersed data (DM = 0)
 		float *vec_ones = new float[N_FREQUENCIES]; 	// A vector of all ones for dedispersion (frequency averaging)
 
-		gpuErrchk(cudaHostAlloc( (void**) &data, INPUT_DATA_SIZE*sizeof(char)));
-		gpuErrchk(cudaHostAlloc( (void**) &dedispersed_out, N_BEAMS*N_PT_SOURCES*sizeof(float)));
+		gpuErrchk(cudaHostAlloc( (void**) &data, INPUT_DATA_SIZE*sizeof(char), 0));
+		gpuErrchk(cudaHostAlloc( (void**) &dedispersed_out, N_BEAMS*N_PT_SOURCES*sizeof(float), 0));
 
 		
 		if (!use_source_catalog){
@@ -318,7 +318,7 @@ int main(int argc, char *argv[]){
 		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[i],    cudaEventDisableTiming));
 	}
 
-
+	observation_loop_state obs_state(MAX_TRANSFER_SEP, MAX_TOTAL_SEP);
 
 	uint64_t blocks_analyzed = 0;
 	uint64_t blocks_transferred = 0;
@@ -358,18 +358,17 @@ int main(int argc, char *argv[]){
 		std::cout << "MAX_TRANSFER_SEP: "<< MAX_TRANSFER_SEP << std::endl;
 	#endif
 
-	#if DEBUG
-		START_TIMER();
-	#endif
-
-	#if BURNIN
+	#if BURNIN && DEBUG
 		for (int i = 0; i < BURNIN; i++){
 			dada_handle.read(&bytes_read);
 			dada_handle.close(bytes_read);
 		}
 	#endif
 
-	gpuErrchk(cudaDeviceSynchronize());
+	#if DEBUG
+		START_TIMER();
+	#endif
+
 
 	while (!observation_complete){
 		
@@ -459,24 +458,25 @@ int main(int argc, char *argv[]){
 					#if VERBOSE
 						std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
 					#endif
-					// ipcio_close_block_read (hdu_in->data_block, bytes_read);
+					dada_handle.close(bytes_read);
 
+				} else {
+					/* Copy Block */
+					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK * (blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
+												block,
+												N_BYTES_PER_BLOCK, 
+												cudaMemcpyHostToDevice,
+												HtoDstream));
+
+					/* Mark PSRDADA as read */
+					// ipcio_close_block_read (hdu_in->data_block, bytes_read);
+					dada_handle.close(bytes_read);
+
+					/* Generate Cuda event which will indicate when the block has been transfered*/
+					gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (N_EVENTS_ON_GPU)], HtoDstream));
+					blocks_transfer_queue++;
 				}
 
-				/* Copy Block */
-				gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK * (blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
-											block,
-											N_BYTES_PER_BLOCK, 
-											cudaMemcpyHostToDevice,
-											HtoDstream));
-
-				/* Mark PSRDADA as read */
-				// ipcio_close_block_read (hdu_in->data_block, bytes_read);
-				dada_handle.close(bytes_read);
-
-				/* Generate Cuda event which will indicate when the block has been transfered*/
-				gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (N_EVENTS_ON_GPU)], HtoDstream));
-				blocks_transfer_queue++;
 			#endif
 		}
 

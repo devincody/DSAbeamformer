@@ -101,6 +101,13 @@
 	#define N_SOURCE_BATCHES (CEILING(N_PT_SOURCES, N_SOURCES_PER_BATCH))
 #endif
 
+/***************************************************
+				DEFINED FUNCTIONS
+***************************************************/
+
+/* Macro which converts from degrees to radians */
+#define DEG2RAD(x) ((x)*PI/180.0)
+
 
 /***************************************************
 				DATA constants
@@ -142,7 +149,7 @@
    of each complex number use 1 Byte after expansion */
 #define N_BYTES_POST_EXPANSION_PER_GEMM  (N_CX_IN_PER_GEMM*N_CX)
 
-/* Number of Bytes before expansion. Each complex number uses half a Byte */
+/* Number of Bytes before expansion from 4-bit to 8-bit. Each complex number uses half a Byte */
 #define N_BYTES_PRE_EXPANSION_PER_GEMM  (N_CX_IN_PER_GEMM*N_CX/2)
 
 /* Number of Bytes (before expansion) for input array */
@@ -168,6 +175,10 @@ typedef char char4_t[4]; //four chars = 32-bit so global memory bandwidth usage 
 typedef char char8_t[8]; //eight chars = 64-bit so global memory bandwidth usage is optimal
 typedef CxInt8_t cuChar4_t[4];
 
+
+
+
+
 class antenna{
 /* Class which manages the x, y, and z positions of each antenna */
 public:
@@ -175,8 +186,12 @@ public:
 	antenna(){x = 0; y = 0; z = 0;}
 };
 
+
+
+
+
 class beam_direction{
-/* Class whcih manages the theta and phi directions of each beam */
+/* Class which manages the theta and phi directions of each beam */
 public:
 	float theta, phi;
 	beam_direction(){theta = 0; phi = 0;}
@@ -188,67 +203,114 @@ public:
 
 
 
+class observation_loop_state{
+private:
+	uint64_t blocks_analyzed = 0;
+	uint64_t blocks_transferred = 0;
+	uint64_t blocks_analysis_queue = 0;
+	uint64_t blocks_transfer_queue = 0;
+	#if DEBUG
+	int source_batch_counter = 0;
+	#endif
+
+	uint64_t maximum_transfer_seperation;
+	uint64_t maximum_total_seperation;
+
+	bool observation_complete = false;
+	bool transfers_complete = false;
+
+public:
+	observation_loop_state(uint64_t maximum_transfer_seperation, uint64_t maximum_total_seperation);
+
+	void increment_blocks_analyzed(){blocks_analyzed++;};
+	void increment_blocks_transferred(){blocks_transferred++;};
+	void increment_blocks_analysis_queue(){blocks_analysis_queue++;};
+	void increment_blocks_transfer_queue(){blocks_transfer_queue++;};
+
+	// uint64_t get_blocks_analyzed(){return blocks_analyzed;}
+	// uint64_t get_blocks_transferred(){return blocks_transferred;}
+	// uint64_t get_blocks_analysis_queue(){return blocks_analysis_queue;}
+	// uint64_t get_blocks_transfer_queue(){return blocks_transfer_queue;}
+
+	bool check_ready_for_transfer();
+	bool check_ready_for_analysis();
+	bool check_observations_complete(int current_gemm);
+	bool check_transfers_complete();
+
+	friend std::ostream & operator << (std::ostream &out, const observation_loop_state &a);
+};
+
+observation_loop_state::observation_loop_state(uint64_t maximum_transfer_seperation, uint64_t maximum_total_seperation){
+	this->maximum_transfer_seperation = maximum_transfer_seperation;
+	this->maximum_total_seperation = maximum_total_seperation;
+}
+
+bool observation_loop_state::check_ready_for_transfer(){
+	return ( (blocks_transfer_queue - blocks_analyzed < maximum_total_seperation)
+			 && (blocks_transfer_queue - blocks_transferred < maximum_transfer_seperation)
+			 && !transfers_complete );
+}
+
+bool observation_loop_state::check_ready_for_analysis(){
+	return blocks_analysis_queue < blocks_transferred;
+}
+
+bool observation_loop_state::check_observations_complete(int current_gemm){
+#if DEBUG
+	if ((current_gemm >= N_PT_SOURCES-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+		observation_complete = 1;
+		std::cout << "obs Complete" << std::endl;
+		return true;
+	} else{
+		return false;
+	}
+#else
+	if ((blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+		observation_complete = 1;
+		std::cout << "obs Complete" << std::endl;
+		return true;
+	} else{
+		return false;
+	}
+#endif
+}
+
+bool observation_loop_state::check_transfers_complete(){
+#if DEBUG
+	if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES){
+		/* If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop */
+		transfers_complete = 1;
+		return true;
+	} else {
+		return false;
+	}
+#else
+	if (bytes_read < block_size){
+		/* If there isn't enough data in the block, end the observation */
+		transfers_complete = 1;
+		#if VERBOSE
+			std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
+		#endif
+		// ipcio_close_block_read (hdu_in->data_block, bytes_read);
+		return true;
+
+	} else {
+		return false;
+	}
+#endif
+}
+
+std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
+	return out << "A: " << a.blocks_analyzed <<  ", AQ: " << a.blocks_analysis_queue << ", T: " << a.blocks_transferred << ", TQ: " << a.blocks_transfer_queue;
+}
+
+
+
+
+
+
+
 #ifndef DEBUG
-/*! register the data_block in the hdu via cudaHostRegister */
-int dada_cuda_dbregister (dada_hdu_t * hdu)
-{
-  ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
-
-  // ensure that the data blocks are SHM locked
-  if (ipcbuf_lock (db) < 0)
-  {
-    perror("dada_dbregister: ipcbuf_lock failed\n");
-    return -1;
-  }
-
-  // dont register buffers if they reside on the device
-  if (ipcbuf_get_device(db) >= 0)
-    return 0;
-
-  size_t bufsz = db->sync->bufsz;
-  unsigned int flags = 0;
-  cudaError_t rval;
-
-  // lock each data block buffer as cuda memory
-  uint64_t ibuf;
-  for (ibuf = 0; ibuf < db->sync->nbufs; ibuf++)
-  {
-    rval = cudaHostRegister ((void *) db->buffer[ibuf], bufsz, flags);
-    if (rval != cudaSuccess)
-    {
-      perror("dada_dbregister:  cudaHostRegister failed\n");
-      return -1;
-    }
-  }
-  return 0;
-}
-
-/*! unregister the data_block in the hdu via cudaHostUnRegister */
-int dada_cuda_dbunregister (dada_hdu_t * hdu)
-{
-  ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
-  cudaError_t error_id;
-
-  // dont unregister buffers if they reside on the device
-  if (ipcbuf_get_device(db) >= 0)
-    return 0;
-
-  // lock each data block buffer as cuda memory
-  uint64_t ibuf;
-  for (ibuf = 0; ibuf < db->sync->nbufs; ibuf++)
-  {
-    error_id = cudaHostUnregister ((void *) db->buffer[ibuf]);
-    if (error_id != cudaSuccess)
-    {
-      fprintf (stderr, "dada_dbunregister: cudaHostUnregister failed: %s\n",
-               cudaGetErrorString(error_id));
-      return -1;
-    }
-  }
-
-  return 0;
-}
-
 	class dada_handler{
 	private:
 		multilog_t* log = 0;
@@ -258,6 +320,8 @@ int dada_cuda_dbunregister (dada_hdu_t * hdu)
 		uint64_t block_id = 0;
 
 		void dsaX_dbgpu_cleanup(void);
+		int dada_cuda_dbregister (dada_hdu_t * hdu);
+		int dada_cuda_dbunregister (dada_hdu_t * hdu);
 
 	public:
 		dada_handler(char * name, int core, key_t in_key);
@@ -351,14 +415,60 @@ int dada_cuda_dbunregister (dada_hdu_t * hdu)
 		dada_hdu_destroy (hdu_in);
 	}
 
+	
+	int dada_handler::dada_cuda_dbregister (dada_hdu_t * hdu) {
+		/*! register the data_block in the hdu via cudaHostRegister */
+		ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
+
+		// ensure that the data blocks are SHM locked
+		if (ipcbuf_lock (db) < 0) {
+			perror("dada_dbregister: ipcbuf_lock failed\n");
+			return -1;
+		}
+
+		// dont register buffers if they reside on the device
+		if (ipcbuf_get_device(db) >= 0) {
+			return 0;
+		}
+		size_t bufsz = db->sync->bufsz;
+		unsigned int flags = 0;
+		cudaError_t rval;
+		// lock each data block buffer as cuda memory
+		uint64_t ibuf;
+
+		for (ibuf = 0; ibuf < db->sync->nbufs; ibuf++) {
+			rval = cudaHostRegister ((void *) db->buffer[ibuf], bufsz, flags);
+			if (rval != cudaSuccess) {
+				perror("dada_dbregister:  cudaHostRegister failed\n");
+				return -1;
+			}
+		}
+		return 0;
+	}
+
+	int dada_handler::dada_cuda_dbunregister (dada_hdu_t * hdu) {
+		/*! unregister the data_block in the hdu via cudaHostUnRegister */
+		ipcbuf_t * db = (ipcbuf_t *) hdu->data_block;
+		cudaError_t error_id;
+
+		// dont unregister buffers if they reside on the device
+		if (ipcbuf_get_device(db) >= 0)
+		return 0;
+
+		// lock each data block buffer as cuda memory
+		uint64_t ibuf;
+		for (ibuf = 0; ibuf < db->sync->nbufs; ibuf++) {
+			error_id = cudaHostUnregister ((void *) db->buffer[ibuf]);
+			if (error_id != cudaSuccess) {
+				fprintf (stderr, "dada_dbunregister: cudaHostUnregister failed: %s\n",
+				cudaGetErrorString(error_id));
+		    	return -1;
+		    }
+		}
+		return 0;
+	}
+
 #endif
-
-/***************************************************
-				DEFINED FUNCTIONS
-***************************************************/
-
-/* Macro which converts from degrees to radians */
-#define DEG2RAD(x) ((x)*PI/180.0)
 
 /***************************************************
 				DADA

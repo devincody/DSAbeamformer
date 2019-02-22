@@ -458,7 +458,7 @@ int main(int argc, char *argv[]){
 					#if VERBOSE
 						std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
 					#endif
-					dada_handle.close(bytes_read);
+					dada_handle.close();
 
 				} else {
 					/* Copy Block */
@@ -470,7 +470,7 @@ int main(int argc, char *argv[]){
 
 					/* Mark PSRDADA as read */
 					// ipcio_close_block_read (hdu_in->data_block, bytes_read);
-					dada_handle.close(bytes_read);
+					dada_handle.close();
 
 					/* Generate Cuda event which will indicate when the block has been transfered*/
 					gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (N_EVENTS_ON_GPU)], HtoDstream));

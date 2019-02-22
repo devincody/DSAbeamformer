@@ -237,8 +237,8 @@ public:
 	bool check_observations_complete(int current_gemm);
 
 	#if DEBUG
-	bool check_transfers_complete();
-	#endif DEBUG
+		bool check_transfers_complete();
+	#endif
 
 	friend std::ostream & operator << (std::ostream &out, const observation_loop_state &a);
 };

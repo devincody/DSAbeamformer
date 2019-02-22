@@ -120,7 +120,7 @@
 #define N_OUTPUTS_PER_GEMM 8
 
 /* Based on the size of a dada blocks: How many matrix-matrix multiplacations are needed */
-#define N_GEMMS_PER_BLOCK 64
+#define N_GEMMS_PER_BLOCK 32
 
 /* For each output, we need to average over 16 iterations and 2 polarizations*/
 #define N_INPUTS_PER_OUTPUT (N_POL*N_AVERAGING)
@@ -153,7 +153,7 @@
 #define N_BYTES_PRE_EXPANSION_PER_GEMM  (N_CX_IN_PER_GEMM*N_CX/2)
 
 /* Number of Bytes (before expansion) for input array */
-#define N_BYTES_PER_BLOCK (N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK)
+#define N_BYTES_PRE_EXPANSION_PER_BLOCK (N_BYTES_PRE_EXPANSION_PER_GEMM*N_GEMMS_PER_BLOCK)
 
 #if DEBUG
 	#define INPUT_DATA_SIZE (N_BYTES_PRE_EXPANSION_PER_GEMM*N_SOURCES_PER_BATCH)
@@ -206,95 +206,6 @@ public:
 
 
 
-class observation_loop_state{
-private:
-	uint64_t blocks_analyzed = 0;
-	uint64_t blocks_transferred = 0;
-	uint64_t blocks_analysis_queue = 0;
-	uint64_t blocks_transfer_queue = 0;
-	#if DEBUG
-		int source_batch_counter = 0;
-	#endif
-
-	uint64_t maximum_transfer_seperation;
-	uint64_t maximum_total_seperation;
-
-	bool observation_complete = false;
-	bool transfers_complete = false;
-
-public:
-	observation_loop_state(uint64_t maximum_transfer_seperation, uint64_t maximum_total_seperation);
-
-	void increment_blocks_analyzed(){blocks_analyzed++;};
-	void increment_blocks_transferred(){blocks_transferred++;};
-	void increment_blocks_analysis_queue(){blocks_analysis_queue++;};
-	void increment_blocks_transfer_queue(){blocks_transfer_queue++;};
-
-	// uint64_t get_blocks_analyzed(){return blocks_analyzed;}
-	// uint64_t get_blocks_transferred(){return blocks_transferred;}
-	// uint64_t get_blocks_analysis_queue(){return blocks_analysis_queue;}
-	// uint64_t get_blocks_transfer_queue(){return blocks_transfer_queue;}
-
-	bool check_ready_for_transfer();
-	bool check_ready_for_analysis();
-	bool check_observations_complete(int current_gemm);
-
-	#if DEBUG
-		bool check_transfers_complete();
-	#endif
-
-	friend std::ostream & operator << (std::ostream &out, const observation_loop_state &a);
-};
-
-observation_loop_state::observation_loop_state(uint64_t maximum_transfer_seperation, uint64_t maximum_total_seperation){
-	this->maximum_transfer_seperation = maximum_transfer_seperation;
-	this->maximum_total_seperation = maximum_total_seperation;
-}
-
-bool observation_loop_state::check_ready_for_transfer(){
-	return ( (blocks_transfer_queue - blocks_analyzed < maximum_total_seperation)
-			 && (blocks_transfer_queue - blocks_transferred < maximum_transfer_seperation)
-			 && !transfers_complete );
-}
-
-bool observation_loop_state::check_ready_for_analysis(){
-	return blocks_analysis_queue < blocks_transferred;
-}
-
-bool observation_loop_state::check_observations_complete(int current_gemm){
-#if DEBUG
-	if ((current_gemm >= N_PT_SOURCES-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
-		observation_complete = 1;
-		std::cout << "obs Complete" << std::endl;
-		return true;
-	} else{
-		return false;
-	}
-#else
-	if ((blocks_analyzed == blocks_transfer_queue) && transfers_complete){
-		observation_complete = 1;
-		std::cout << "obs Complete" << std::endl;
-		return true;
-	} else{
-		return false;
-	}
-#endif
-}
-
-#if DEBUG
-bool observation_loop_state::check_transfers_complete(){
-	if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES){
-		 /* If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop */
-		transfers_complete = 1;
-		return true;
-	}
-	return false;
-}
-#endif
-
-std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
-	return out << "A: " << a.blocks_analyzed <<  ", AQ: " << a.blocks_analysis_queue << ", T: " << a.blocks_transferred << ", TQ: " << a.blocks_transfer_queue;
-}
 
 
 
@@ -322,7 +233,7 @@ std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
 		void read_headers(void);
 		char* read();
 		void close();
-		bool check_transfers_complete(bool * transfers_complete);
+		bool check_transfers_complete();
 		uint64_t get_block_size(){return block_size;}
 		uint64_t get_bytes_read(){return bytes_read;}
 	};
@@ -402,14 +313,13 @@ std::ostream & operator << (std::ostream &out, const observation_loop_state &a){
 		ipcio_close_block_read (hdu_in->data_block, bytes_read);
 	}
 	
-	bool dada_handler::check_transfers_complete(bool * transfers_complete){
-		if (bytes_read != N_BYTES_PER_BLOCK){
-			std::cout << "ERROR: Async, Bytes Read: " << bytes_read << ", Should also be "<< N_BYTES_PER_BLOCK << std::endl;
+	bool dada_handler::check_transfers_complete(){
+		if (bytes_read != N_BYTES_PRE_EXPANSION_PER_BLOCK){
+			std::cout << "ERROR: Async, Bytes Read: " << bytes_read << ", Should also be "<< N_BYTES_PRE_EXPANSION_PER_BLOCK << std::endl;
 		}
 
 		if (bytes_read < block_size){
 			/* If there isn't enough data in the block, end the observation */
-			*transfers_complete = true;
 			#if VERBOSE
 				std::cout <<"bytes_read < block_size, ending transfers" << std::endl;
 			#endif
@@ -635,7 +545,7 @@ void print_all_defines(void){
 	std::cout << "N_CX_OUT_PER_GEMM: " << N_CX_OUT_PER_GEMM << "\n";
 	std::cout << "N_BYTES_POST_EXPANSION_PER_GEMM: " << N_BYTES_POST_EXPANSION_PER_GEMM << "\n";
 	std::cout << "N_BYTES_PRE_EXPANSION_PER_GEMM: " << N_BYTES_PRE_EXPANSION_PER_GEMM << "\n";
-	std::cout << "N_BYTES_PER_BLOCK: " << N_BYTES_PER_BLOCK << "\n";
+	std::cout << "N_BYTES_PRE_EXPANSION_PER_BLOCK: " << N_BYTES_PRE_EXPANSION_PER_BLOCK << "\n";
 	std::cout << "N_GPUS: " << N_GPUS << "\n";
 	std::cout << "TOT_CHANNELS: " << TOT_CHANNELS << "\n";
 	std::cout << "START_F: " << START_F << "\n";

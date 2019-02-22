@@ -232,7 +232,7 @@ int main(int argc, char *argv[]){
 	gpuErrchk(cudaMalloc(&d_A, 		A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_B, 		N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_C, 		N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
-	gpuErrchk(cudaMalloc(&d_data, 	N_BYTES_PER_BLOCK*N_BLOCKS_ON_GPU)); 							// array for raw data
+	gpuErrchk(cudaMalloc(&d_data, 	N_BYTES_PRE_EXPANSION_PER_BLOCK*N_BLOCKS_ON_GPU)); 							// array for raw data
 	gpuErrchk(cudaMalloc(&d_out, 	N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
 
 	/* Cublas Constants */
@@ -271,7 +271,7 @@ int main(int argc, char *argv[]){
 	/* Zero out GPU memory with cudaMemset (this is helpful when the number of antennas != N_ANTENNAS) */
 	gpuErrchk(cudaMemset(d_B, 0,  	N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMemset(d_C, 0,  	N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
-	gpuErrchk(cudaMemset(d_data, 0,  N_BYTES_PER_BLOCK*N_BLOCKS_ON_GPU)); 							// array for raw data
+	gpuErrchk(cudaMemset(d_data, 0,  N_BYTES_PRE_EXPANSION_PER_BLOCK*N_BLOCKS_ON_GPU)); 		// array for raw data
 	gpuErrchk(cudaMemset(d_out, 0,  N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
 
 	#if DEBUG
@@ -291,8 +291,8 @@ int main(int argc, char *argv[]){
 	cublasHandle_t handle[N_STREAMS];
 	// std::thread thread[N_STREAMS];
 	int timeSlice[N_STREAMS];
-	cudaEvent_t BlockTransferredSync[N_EVENTS_ON_GPU];
-	cudaEvent_t BlockAnalyzedSync[N_EVENTS_ON_GPU];
+	// cudaEvent_t BlockTransferredSync[N_EVENTS_ON_GPU];
+	// cudaEvent_t BlockAnalyzedSync[N_EVENTS_ON_GPU];
 
 	// gpuErrchk(cudaStreamCreateWithPriority(&HtoDstream, cudaStreamNonBlocking, priority_high));
 	gpuErrchk(cudaStreamCreate(&HtoDstream));
@@ -313,17 +313,17 @@ int main(int argc, char *argv[]){
 	}
 	
 
-	for (int i = 0; i < N_EVENTS_ON_GPU; i++){
-		gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[i], cudaEventDisableTiming));
-		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[i],    cudaEventDisableTiming));
-	}
+	// for (int i = 0; i < N_EVENTS_ON_GPU; i++){
+	// 	gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[i], cudaEventDisableTiming));
+	// 	gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[i],    cudaEventDisableTiming));
+	// }
 
 	observation_loop_state obs_state(MAX_TRANSFER_SEP, MAX_TOTAL_SEP);
 
-	uint64_t blocks_analyzed = 0;
-	uint64_t blocks_transferred = 0;
-	uint64_t blocks_analysis_queue = 0;
-	uint64_t blocks_transfer_queue = 0;
+	// uint64_t blocks_analyzed = 0;
+	// uint64_t blocks_transferred = 0;
+	// uint64_t blocks_analysis_queue = 0;
+	// uint64_t blocks_transfer_queue = 0;
 
 	#if DEBUG
 		int current_gemm = 0;
@@ -346,8 +346,8 @@ int main(int argc, char *argv[]){
 	/*********************************************************************************
 	START OBSERVATION LOOP
 	*********************************************************************************/
-	bool observation_complete = false;
-	bool transfers_complete = false;
+	// bool observation_complete = false;
+	// bool transfers_complete = false;
 	#if DEBUG
 		int source_batch_counter = 0;
 	#endif
@@ -372,12 +372,13 @@ int main(int argc, char *argv[]){
 	#endif
 
 
-	while (!observation_complete){
+	while (!obs_state.get_observation_complete()){
 		
 		#if VERBOSE
 			/* Header to be printed during every loop */
 			std::cout << "##########################################" << std::endl;
-			std::cout << "A: " << blocks_analyzed <<  ", AQ: " << blocks_analysis_queue << ", T: " << blocks_transferred << ", TQ: " << blocks_transfer_queue << std::endl;
+			std::cout << obs_state << std::endl;
+			// std::cout << "A: " << blocks_analyzed <<  ", AQ: " << blocks_analysis_queue << ", T: " << blocks_transferred << ", TQ: " << blocks_transfer_queue << std::endl;
 			// std::cout << "current_gemm: " << current_gemm << ", transfers_complete: " << transfers_complete << std::endl;
 		#endif 
 
@@ -387,7 +388,8 @@ int main(int argc, char *argv[]){
 		**************************************************/
 
 		/* Data is copied iff the analysis steps and transfer rates are keeping up and there is still data */
-		if ((blocks_transfer_queue - blocks_analyzed < MAX_TOTAL_SEP) && (blocks_transfer_queue - blocks_transferred < MAX_TRANSFER_SEP) && !transfers_complete){
+		// if ((blocks_transfer_queue - blocks_analyzed < MAX_TOTAL_SEP) && (blocks_transfer_queue - blocks_transferred < MAX_TRANSFER_SEP) && !transfers_complete){
+		if (obs_state.check_ready_for_transfer()){
 			#if DEBUG
 				/***********************************
 				IF debugging, copy from "data" array
@@ -401,7 +403,7 @@ int main(int argc, char *argv[]){
 				/***********************************
 				 GENERATE TEST SIGNAL			   
 				 ***********************************/
-				if (use_source_catalog && (blocks_transferred == (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) ){
+				if (use_source_catalog && (obs_state.get_blocks_transferred() == (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) ){
 					//Generates the dummy data given a set of directions.
 					std::cout << "Generating new source data" << std::endl;
 					generate_test_data(data, sources, pos, gpu, B_stride, source_batch_counter);
@@ -415,27 +417,29 @@ int main(int argc, char *argv[]){
 				/***********************************
 				 Copy Block			   
 				 ***********************************/
-				if (blocks_transfer_queue < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) {
+				if (obs_state.get_blocks_transfer_queue() < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) {
 					/* Only initiate transfers if there is valid data in data[] */
-					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK * (blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
-												&data[(N_BYTES_PER_BLOCK * blocks_transfer_queue) % INPUT_DATA_SIZE],
-												N_BYTES_PER_BLOCK, 
+					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_next_gpu_transfer_block()], //(blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
+												&data[(N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_blocks_transfer_queue()) % INPUT_DATA_SIZE],
+												N_BYTES_PRE_EXPANSION_PER_BLOCK, 
 												cudaMemcpyHostToDevice,
 												HtoDstream));
 
 					/* Generate Cuda event which will indicate when the block has been transfered*/
-					gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (N_EVENTS_ON_GPU)], HtoDstream));
-					blocks_transfer_queue++;
+					// gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (N_EVENTS_ON_GPU)], HtoDstream));
+					// blocks_transfer_queue++;
+					obs_state.generate_transfer_event(HtoDstream);
 				}
 
 
 				/***********************************
 				 Check if transfers are done			   
 				 ***********************************/
-				if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES){
-					/* If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop */
-					transfers_complete = true;
-				}
+				obs_state.check_transfers_complete();
+				// if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES){
+				// 	 If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop 
+				// 	transfers_complete = true;
+				// }
 
 			#else
 				/***********************************
@@ -450,8 +454,8 @@ int main(int argc, char *argv[]){
 
 				// block = ipcio_open_block_read(hdu_in->data_block, &bytes_read, &block_id);
 
-				// if (bytes_read != N_BYTES_PER_BLOCK){
-				// 	std::cout << "ERROR: Async, Bytes Read: " << bytes_read << ", Should also be "<< N_BYTES_PER_BLOCK << std::endl;
+				// if (bytes_read != N_BYTES_PRE_EXPANSION_PER_BLOCK){
+				// 	std::cout << "ERROR: Async, Bytes Read: " << bytes_read << ", Should also be "<< N_BYTES_PRE_EXPANSION_PER_BLOCK << std::endl;
 				// }
 
 				// if (bytes_read < block_size){
@@ -463,11 +467,12 @@ int main(int argc, char *argv[]){
 				// 	dada_handle.close();
 
 				// } else 
-				if (!dada_handle.check_transfers_complete(&transfers_complete)){
+				if (!dada_handle.check_transfers_complete()){
+					obs_state.set_transfers_complete(true);
 					/* Copy Block */
-					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PER_BLOCK * (blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
+					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_next_gpu_transfer_block()],//(blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
 												block,
-												N_BYTES_PER_BLOCK, 
+												N_BYTES_PRE_EXPANSION_PER_BLOCK, 
 												cudaMemcpyHostToDevice,
 												HtoDstream));
 
@@ -476,8 +481,10 @@ int main(int argc, char *argv[]){
 					dada_handle.close();
 
 					/* Generate Cuda event which will indicate when the block has been transfered*/
-					gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (N_EVENTS_ON_GPU)], HtoDstream));
-					blocks_transfer_queue++;
+					// gpuErrchk(cudaEventRecord(BlockTransferredSync[blocks_transfer_queue % (N_EVENTS_ON_GPU)], HtoDstream));
+					// blocks_transfer_queue++;
+					obs_state.generate_transfer_event(HtoDstream);
+					
 				}
 
 			#endif
@@ -486,40 +493,42 @@ int main(int argc, char *argv[]){
 		/**************************************************
 				Check if data has been transfered
 		**************************************************/
-
-		/* Iterate through all left-over blocks and see if they've been finished */
-		for (uint64_t event = blocks_transferred; event < blocks_transfer_queue; event ++){
-			if(cudaEventQuery(BlockTransferredSync[event % (N_EVENTS_ON_GPU)]) == cudaSuccess){
+		obs_state.check_transfer_events();
+		// /* Iterate through all left-over blocks and see if they've been finished */
+		// for (uint64_t event = blocks_transferred; event < blocks_transfer_queue; event ++){
+		// 	if(cudaEventQuery(BlockTransferredSync[event % (N_EVENTS_ON_GPU)]) == cudaSuccess){
 			
-				#if VERBOSE
-					std::cout << "Block " << event << " transfered to GPU" << std::endl;
-				#endif
+		// 		#if VERBOSE
+		// 			std::cout << "Block " << event << " transfered to GPU" << std::endl;
+		// 		#endif
 
-				blocks_transferred ++;
+		// 		blocks_transferred ++;
 
-				/* Destroy and Recreate Flags */
-				gpuErrchk(cudaEventDestroy(BlockTransferredSync[event % (N_EVENTS_ON_GPU)]));
-				gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[event % (N_EVENTS_ON_GPU)], cudaEventDisableTiming));
-			} else {
-				break; // dont need to check later blocks if current block has not finished
-			}
-		}
+		// 		/* Destroy and Recreate Flags */
+		// 		gpuErrchk(cudaEventDestroy(BlockTransferredSync[event % (N_EVENTS_ON_GPU)]));
+		// 		gpuErrchk(cudaEventCreateWithFlags(&BlockTransferredSync[event % (N_EVENTS_ON_GPU)], cudaEventDisableTiming));
+		// 	} else {
+		// 		break; // dont need to check later blocks if current block has not finished
+		// 	}
+		// }
 
 		/**************************************************
 					Initiate Beamforming
 		**************************************************/
-		if (blocks_analysis_queue < blocks_transferred){
+		// if (blocks_analysis_queue < blocks_transferred){
+		if(obs_state.check_ready_for_analysis()){
 
 			for (int part = 0; part < N_GEMMS_PER_BLOCK/N_STREAMS; part++){
+				/* Call routine once per each GEMM in a BLOCK */
 
 				#if VERBOSE
-					std::cout << "Queueing Beamforming. Analyzed = " << blocks_analyzed << " Transferred = " << blocks_transferred << " Start Dir = " << blocks_analysis_queue*N_GEMMS_PER_BLOCK + timeSlice[0] << std::endl; 
+					std::cout << "Queueing Beamforming. Analyzed = Start Dir = " << obs_state.get_current_analysis_gemm(timeSlice[0]) << std::endl; 
 				#endif
 
 				for (int st = 0; st < N_STREAMS; st++){
 
 					/* Expand input from 4-bit integers to 8-bit integers */
-					expand_input<<<10000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*(blocks_analysis_queue%N_BLOCKS_ON_GPU) + timeSlice[st])],
+					expand_input<<<10000, 32, 0, stream[st]>>>(&d_data[N_BYTES_PRE_EXPANSION_PER_GEMM*(N_GEMMS_PER_BLOCK*obs_state.get_next_gpu_analysis_block() + timeSlice[st])],
 														      (char *) &d_B[N_CX_IN_PER_GEMM*st], 
 														      B_stride*N_FREQUENCIES);
 
@@ -546,7 +555,7 @@ int main(int argc, char *argv[]){
 											  stream[st]));
 
 					#if DEBUG
-						current_gemm = blocks_analysis_queue * N_GEMMS_PER_BLOCK + timeSlice[st];
+						current_gemm = obs_state.get_current_analysis_gemm(timeSlice[st]);
 						if (current_gemm < N_PT_SOURCES){ // no need to copy more than the number of sources.
 							std::cout << "Current GEMM: " << current_gemm << std::endl;
 
@@ -576,48 +585,54 @@ int main(int argc, char *argv[]){
 
 				}
 			}
-			gpuErrchk(cudaEventRecord(BlockAnalyzedSync[blocks_analysis_queue % (N_EVENTS_ON_GPU)], stream[N_STREAMS-1]));
-			blocks_analysis_queue ++;
+			// gpuErrchk(cudaEventRecord(BlockAnalyzedSync[blocks_analysis_queue % (N_EVENTS_ON_GPU)], stream[N_STREAMS-1]));
+			// blocks_analysis_queue ++;
+			obs_state.generate_analysis_event(stream[N_STREAMS-1]);
 		}
 
 
 		/**************************************************
 			Check if beamforming analysis has completed
 		**************************************************/
-		for (uint64_t event = blocks_analyzed; event < blocks_analysis_queue; event ++){
-			if(cudaEventQuery(BlockAnalyzedSync[event % (N_EVENTS_ON_GPU)]) == cudaSuccess){
+		obs_state.check_analysis_events();
+		// for (uint64_t event = blocks_analyzed; event < blocks_analysis_queue; event ++){
+		// 	if(cudaEventQuery(BlockAnalyzedSync[event % (N_EVENTS_ON_GPU)]) == cudaSuccess){
 
-				//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
-				blocks_analyzed++;
-				#if VERBOSE
-					std::cout << "Block " << event << " Analyzed" << std::endl;
-				#endif
-				gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event % (N_EVENTS_ON_GPU)]));
-				gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[event % (N_EVENTS_ON_GPU)], cudaEventDisableTiming));
+		// 		//This is incremented once each time slice in each block is analyzed (or more accurately, scheduled)
+		// 		blocks_analyzed++;
+		// 		#if VERBOSE
+		// 			std::cout << "Block " << event << " Analyzed" << std::endl;
+		// 		#endif
+		// 		gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event % (N_EVENTS_ON_GPU)]));
+		// 		gpuErrchk(cudaEventCreateWithFlags(&BlockAnalyzedSync[event % (N_EVENTS_ON_GPU)], cudaEventDisableTiming));
 				
-			} else {
-				break; // If previous analyzed blocks have not been finished, there's no reason to check the next blocks
-			}
-		}
+		// 	} else {
+		// 		break; // If previous analyzed blocks have not been finished, there's no reason to check the next blocks
+		// 	}
+		// }
 
 		/**************************************************
 		Check if observations should be concluded
 		**************************************************/
-		#if DEBUG
-			if ((current_gemm >= N_PT_SOURCES-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
-				observation_complete = true;
-				std::cout << "obs Complete" << std::endl;
-				break;
-			}
-		#else
-			if ((blocks_analyzed == blocks_transfer_queue) && transfers_complete){
-				observation_complete = true;
-				std::cout << "obs Complete" << std::endl;
-				break;
-			}
-		#endif
+		obs_state.check_observations_complete();
+		// #if DEBUG
+		// 	if ((current_gemm >= N_PT_SOURCES-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+		// 		observation_complete = true;
+		// 		std::cout << "obs Complete" << std::endl;
+		// 		break;
+		// 	}
+		// #else
+		// 	if ((blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+		// 		observation_complete = true;
+		// 		std::cout << "obs Complete" << std::endl;
+		// 		break;
+		// 	}
+		// #endif
 
 	} // end while (!observation_complete)
+
+
+
 
 	#if DEBUG
 		float observation_time_ms;
@@ -632,9 +647,9 @@ int main(int argc, char *argv[]){
 			float observation_time_ms;
 			STOP_RECORD_TIMER(observation_time_ms);
 			std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
-			std::cout << "Code produced outputs for " << N_GEMMS_PER_BLOCK*blocks_transfer_queue*N_OUTPUTS_PER_GEMM << " data chunks.\n";
-			std::cout << "Time per data chunk: " << observation_time_ms/(N_GEMMS_PER_BLOCK*blocks_transfer_queue*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
-			std::cout << "Approximate datarate: " << dada_handle.get_block_size()*blocks_transfer_queue/observation_time_ms/1e6 << "GB/s" << std::endl;
+			std::cout << "Code produced outputs for " << obs_state.get_current_transfer_gemm()*N_OUTPUTS_PER_GEMM << " data chunks.\n";
+			std::cout << "Time per data chunk: " << observation_time_ms/(obs_state.get_current_transfer_gemm()*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
+			std::cout << "Approximate datarate: " << dada_handle.get_block_size()*obs_state.get_blocks_transfer_queue()/observation_time_ms/1e6 << "GB/s" << std::endl;
 
 		#endif
 	#endif
@@ -655,10 +670,10 @@ int main(int argc, char *argv[]){
 
 	std::cout << "Freeing CUDA Structures" << std::endl;
 
-	for (int event = 0; event < N_EVENTS_ON_GPU; event++){
-		gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event]));
-		gpuErrchk(cudaEventDestroy(BlockTransferredSync[event]));
-	}
+	// for (int event = 0; event < N_EVENTS_ON_GPU; event++){
+	// 	gpuErrchk(cudaEventDestroy(BlockAnalyzedSync[event]));
+	// 	gpuErrchk(cudaEventDestroy(BlockTransferredSync[event]));
+	// }
 
 	for (int i = 0; i < N_STREAMS; i++){
 		gpuErrchk(cudaStreamDestroy(stream[i]));

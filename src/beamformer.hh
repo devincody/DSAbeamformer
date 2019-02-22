@@ -182,8 +182,10 @@ typedef CxInt8_t cuChar4_t[4];
 class antenna{
 /* Class which manages the x, y, and z positions of each antenna */
 public:
-	float x, y, z;
-	antenna(){x = 0; y = 0; z = 0;}
+	float x = 0;
+	float y = 0;
+	float z = 0;
+	antenna(){}
 };
 
 
@@ -193,8 +195,9 @@ public:
 class beam_direction{
 /* Class which manages the theta and phi directions of each beam */
 public:
-	float theta, phi;
-	beam_direction(){theta = 0; phi = 0;}
+	float theta = 0;
+	float phi = 0;
+	beam_direction(){}
 	beam_direction(float th, float ph) : theta(th), phi(ph) {}
 };
 

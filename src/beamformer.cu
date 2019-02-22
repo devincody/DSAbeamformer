@@ -358,14 +358,15 @@ int main(int argc, char *argv[]){
 		std::cout << "MAX_TRANSFER_SEP: "<< MAX_TRANSFER_SEP << std::endl;
 	#endif
 
-	#if BURNIN && DEBUG
+	#if BURNIN && !DEBUG
+		std::cout << "Burning IN" << std::endl;
 		for (int i = 0; i < BURNIN; i++){
 			dada_handle.read();
 			dada_handle.close();
 		}
 	#endif
 
-	#if DEBUG
+	#if DEBUG || VERBOSE
 		START_TIMER();
 	#endif
 
@@ -621,9 +622,20 @@ int main(int argc, char *argv[]){
 		float observation_time_ms;
 		STOP_RECORD_TIMER(observation_time_ms);
 		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
+
 		std::cout << "Code produced outputs for " << N_PT_SOURCES*N_OUTPUTS_PER_GEMM << " data chunks.\n";
 		std::cout << "Time per data chunk: " << observation_time_ms/(N_PT_SOURCES*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
 		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_PT_SOURCES/observation_time_ms/1e6 << "GB/s" << std::endl;
+	#else
+		#if VERBOSE
+			float observation_time_ms;
+			STOP_RECORD_TIMER(observation_time_ms);
+			std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
+			std::cout << "Code produced outputs for " << N_GEMMS_PER_BLOCK*blocks_transfer_queue*N_OUTPUTS_PER_GEMM << " data chunks.\n";
+			std::cout << "Time per data chunk: " << observation_time_ms/(N_GEMMS_PER_BLOCK*blocks_transfer_queue*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
+			std::cout << "Approximate datarate: " << dada_handler.get_block_size()*blocks_transfer_queue/observation_time_ms/1e6 << "GB/s" << std::endl;
+
+		#endif
 	#endif
 
 

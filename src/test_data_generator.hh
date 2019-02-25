@@ -10,7 +10,6 @@ class test_data_generator{
 		bool use_source_catalog = false;
 		char *data;
 
-		int stride;
 	public:
 		
 		test_data_generator();
@@ -60,7 +59,7 @@ void test_data_generator::read_in_source_directions(char * file_name){
 void test_data_generator::generate_test_data(antenna pos[], int gpu){
 	// float test_direction;
 	char high, low;
-	
+
 	for (long direction = 0; direction < N_SOURCES_PER_BATCH; direction++){
 		//test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_PT_SOURCES-1);
 
@@ -73,21 +72,19 @@ void test_data_generator::generate_test_data(antenna pos[], int gpu){
 					int source_look_up = direction + source_batch_counter*N_SOURCES_PER_BATCH;
 
 					if (source_look_up < n_pt_sources){
-						high = ((char) round(SIG_MAX_VAL*cos(2*PI*( pos[k].x*sin(sources[source_look_up].theta) + pos[k].y*sin(sources[source_look_up].phi) )/wavelength))); //real
-						low  = ((char) round(SIG_MAX_VAL*sin(2*PI*( pos[k].x*sin(sources[source_look_up].theta) + pos[k].y*sin(sources[source_look_up].phi) )/wavelength))); //imag
+						high = ((char) round(SIG_MAX_VAL*cos(2 * PI * (pos[k].x * sin(sources[source_look_up].theta) + pos[k].y * sin(sources[source_look_up].phi)) / wavelength))); //real
+						low  = ((char) round(SIG_MAX_VAL*sin(2 * PI * (pos[k].x * sin(sources[source_look_up].theta) + pos[k].y * sin(sources[source_look_up].phi)) / wavelength))); //imag
 
-						data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
+						data[direction * N_BYTES_PRE_EXPANSION_PER_GEMM + i * N_TIMESTEPS_PER_GEMM * N_ANTENNAS + j * N_ANTENNAS + k] = (high << 4) | (0x0F & low);
 					} else {
-						data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = 0;
+						data[direction * N_BYTES_PRE_EXPANSION_PER_GEMM + i * N_TIMESTEPS_PER_GEMM * N_ANTENNAS + j * N_ANTENNAS + k] = 0;
 					}
 				}
 			}
 		}
 	}
 
-	for (int i = 0; i < 20; i++){
-		std::cout << "data: " << data[0] << ", " << std::endl;
-	}
+
 
 	source_batch_counter ++;
 }

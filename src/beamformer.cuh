@@ -84,6 +84,7 @@ private:
 	cudaEvent_t BlockAnalyzedSync[N_EVENTS_ON_GPU];
 
 	int most_recent_gemm = 0;
+	int n_pt_sources = 0;
 
 public:
 	observation_loop_state(uint64_t maximum_transfer_seperation, uint64_t maximum_total_seperation);
@@ -114,6 +115,7 @@ public:
 
 	bool check_observations_complete();
 	#if DEBUG
+		void set_n_pt_sources(val){n_pt_sources = val;}
 		bool check_transfers_complete();
 	#endif
 
@@ -208,7 +210,7 @@ bool observation_loop_state::check_ready_for_analysis() const {
 
 bool observation_loop_state::check_observations_complete() {
 #if DEBUG
-	if ((most_recent_gemm >= N_PT_SOURCES-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete) {
+	if ((most_recent_gemm >= n_pt_sources-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete) {
 		observation_complete = true;
 		std::cout << "obs Complete" << std::endl;
 		return true;
@@ -226,7 +228,7 @@ bool observation_loop_state::check_observations_complete() {
 
 #if DEBUG
 bool observation_loop_state::check_transfers_complete() {
-	if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES) {
+	if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= n_pt_sources) {
 		 /* If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop */
 		transfers_complete = 1;
 		return true;

@@ -17,7 +17,7 @@ int main(int argc, char *argv[]){
 	bool dir_set = false;
 
 	#if DEBUG
-		beam_direction* sources; //= new beam_direction[n_point_sources]();  // Array to hold direction of the test sources
+		beam_direction* sources; //= new beam_direction[n_pt_sources]();  // Array to hold direction of the test sources
 		bool use_source_catalog = false;
 		int n_pt_sources;
 	#endif
@@ -70,8 +70,8 @@ int main(int argc, char *argv[]){
 						fprintf (stderr, "beam: could not parse source direction file from %s\n", optarg);
 						return EXIT_FAILURE;
 					}
-					sources = read_in_source_directions(file_name, *n_pt_sources);
-					n_source_batches = CEILING(n_pt_sources, N_SOURCES_PER_BATCH);
+					sources = read_in_source_directions(file_name, &n_pt_sources);
+					int n_source_batches = CEILING(n_pt_sources, N_SOURCES_PER_BATCH);
 					use_source_catalog = true;
 					break;
 			#endif
@@ -194,7 +194,7 @@ int main(int argc, char *argv[]){
 		float *vec_ones = new float[N_FREQUENCIES]; 	// A vector of all ones for dedispersion (frequency averaging)
 
 		gpuErrchk(cudaHostAlloc( (void**) &data, INPUT_DATA_SIZE*sizeof(char), 0));
-		gpuErrchk(cudaHostAlloc( (void**) &dedispersed_out, N_BEAMS*n_point_sources*sizeof(float), 0));
+		gpuErrchk(cudaHostAlloc( (void**) &dedispersed_out, N_BEAMS*n_pt_sources*sizeof(float), 0));
 
 		
 		if (!use_source_catalog){
@@ -324,14 +324,13 @@ int main(int argc, char *argv[]){
 	// }
 
 	observation_loop_state obs_state(MAX_TRANSFER_SEP, MAX_TOTAL_SEP);
-
-	// uint64_t blocks_analyzed = 0;
-	// uint64_t blocks_transferred = 0;
-	// uint64_t blocks_analysis_queue = 0;
-	// uint64_t blocks_transfer_queue = 0;
+	#if DEBUG
+		obs_state.set_n_pt_sources(n_pt_sources);
+	#endif
 
 	#if DEBUG
 		int current_gemm = 0;
+		int source_batch_counter = 0;
 	#endif
 
 
@@ -341,7 +340,6 @@ int main(int argc, char *argv[]){
 	***************************************************/
 
 	#ifndef DEBUG
-		// uint64_t bytes_read = 0;
 		char *block;
 		dada_handle.read_headers();
 		uint64_t block_size = dada_handle.get_block_size();
@@ -351,11 +349,6 @@ int main(int argc, char *argv[]){
 	/*********************************************************************************
 	START OBSERVATION LOOP
 	*********************************************************************************/
-	// bool observation_complete = false;
-	// bool transfers_complete = false;
-	#if DEBUG
-		int source_batch_counter = 0;
-	#endif
 
 	#if VERBOSE
 		std::cout << "Executing beamformer.cu" << "\n";
@@ -446,8 +439,8 @@ int main(int argc, char *argv[]){
 				 Check if transfers are done			   
 				 ***********************************/
 				obs_state.check_transfers_complete();
-				// if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= n_point_sources){
-				// 	 If the amount of data queued for transfer is greater than the amount needed for analyzing n_point_sources, stop 
+				// if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= n_pt_sources){
+				// 	 If the amount of data queued for transfer is greater than the amount needed for analyzing n_pt_sources, stop 
 				// 	transfers_complete = true;
 				// }
 
@@ -568,7 +561,7 @@ int main(int argc, char *argv[]){
 
 					#if DEBUG
 						current_gemm = obs_state.get_current_analysis_gemm(timeSlice[st]);
-						if (current_gemm < n_point_sources){ // no need to copy more than the number of sources.
+						if (current_gemm < n_pt_sources){ // no need to copy more than the number of sources.
 							std::cout << "Current GEMM: " << current_gemm << std::endl;
 
 							/* Sum over all 256 frequencies with a matrix-vector multiplication. */
@@ -628,7 +621,7 @@ int main(int argc, char *argv[]){
 		**************************************************/
 		obs_state.check_observations_complete();
 		// #if DEBUG
-		// 	if ((current_gemm >= n_point_sources-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+		// 	if ((current_gemm >= n_pt_sources-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
 		// 		observation_complete = true;
 		// 		std::cout << "obs Complete" << std::endl;
 		// 		break;
@@ -651,9 +644,9 @@ int main(int argc, char *argv[]){
 		obseration_time_ms += time_accumulator_ms;
 		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 
-		std::cout << "Code produced outputs for " << n_point_sources*N_OUTPUTS_PER_GEMM << " data chunks.\n";
-		std::cout << "Time per data chunk: " << observation_time_ms/(n_point_sources*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
-		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*n_point_sources/observation_time_ms/1e6 << "GB/s" << std::endl;
+		std::cout << "Code produced outputs for " << n_pt_sources*N_OUTPUTS_PER_GEMM << " data chunks.\n";
+		std::cout << "Time per data chunk: " << observation_time_ms/(n_pt_sources*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
+		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*n_pt_sources/observation_time_ms/1e6 << "GB/s" << std::endl;
 	#else
 		#if VERBOSE
 			STOP_RECORD_TIMER(time_accumulator_ms);
@@ -677,7 +670,7 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		char filename[] = "bin/data.py";
-		write_array_to_disk_as_python_file(dedispersed_out, n_point_sources, N_BEAMS, filename);
+		write_array_to_disk_as_python_file(dedispersed_out, n_pt_sources, N_BEAMS, filename);
 	#endif
 
 	std::cout << "Freeing CUDA Structures" << std::endl;

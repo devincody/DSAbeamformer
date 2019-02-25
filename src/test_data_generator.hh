@@ -6,9 +6,9 @@ class test_data_generator{
 		int n_pt_sources = 1024;
 		int n_source_batches = 1;
 		int source_batch_counter = 0;
-		beam_direction* sources;
+		beam_direction* sources = nullptr;
 		bool use_source_catalog = false;
-		char *data;
+		char *data = nullptr;
 
 	public:
 		
@@ -60,6 +60,7 @@ void test_data_generator::generate_test_data(antenna pos[], int gpu){
 	// float test_direction;
 	char high, low;
 
+	#pragma omp parallel for
 	for (long direction = 0; direction < N_SOURCES_PER_BATCH; direction++){
 		//test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_PT_SOURCES-1);
 

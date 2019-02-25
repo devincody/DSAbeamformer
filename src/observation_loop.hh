@@ -8,7 +8,6 @@ private:
 	uint64_t maximum_transfer_seperation;
 	uint64_t maximum_total_seperation;
 
-	bool observation_complete = false;
 	bool transfers_complete = false;
 
 	cudaEvent_t BlockTransferredSync[N_EVENTS_ON_GPU];
@@ -37,7 +36,6 @@ public:
 	uint64_t get_next_gpu_transfer_block() const {return blocks_transfer_queue%N_BLOCKS_ON_GPU;}
 
 	void set_transfers_complete(bool value) {transfers_complete = value;}
-	bool get_observation_complete() const {return observation_complete;}
 	bool get_transfers_complete() const {return transfers_complete;}
 
 	bool check_ready_for_transfer() const;
@@ -147,14 +145,12 @@ bool observation_loop_state::check_ready_for_analysis() const {
 bool observation_loop_state::check_observations_complete() {
 #if DEBUG
 	if ((most_recent_gemm >= n_pt_sources-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete) {
-		observation_complete = true;
 		std::cout << "obs Complete" << std::endl;
 		return true;
 	}
 	return false;
 #else
 	if ((blocks_analyzed == blocks_transfer_queue) && transfers_complete) {
-		observation_complete = true;
 		std::cout << "obs Complete" << std::endl;
 		return true;
 	}

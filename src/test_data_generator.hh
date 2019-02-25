@@ -1,3 +1,6 @@
+#define BOGUS_DATA 0x70
+
+
 class test_data_generator{
 	private:
 		int n_pt_sources = 1024;
@@ -44,6 +47,13 @@ void test_data_generator::read_in_source_directions(char * file_name){
 		}
 		use_source_catalog = true;
 		n_source_batches = CEILING(n_pt_sources, N_SOURCES_PER_BATCH);
+
+		#if VERBOSE
+		std::cout << "Read in " << n_pt_sources << " source directions" << std::endl;
+		for (int i = 0; i < 20; i++){
+			std::cout << "data: " << data[0] << ", " << std::endl;
+		}
+		#endif
 	}
 }
 
@@ -75,6 +85,7 @@ void test_data_generator::generate_test_data(antenna pos[], int gpu){
 			}
 		}
 	}
+
 	source_batch_counter ++;
 }
 

@@ -411,8 +411,10 @@ int main(int argc, char *argv[]){
 				// if (obs_state.get_blocks_transfer_queue() < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) {
 				if(input_data_generator.check_data_ready_for_transfer(obs_state.get_blocks_transfer_queue())){
 					/* Only initiate transfers if there is valid data in data[] */
+
+					char* input_data = input_data_generator.get_data();
 					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_next_gpu_transfer_block()], //(blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
-												&input_data_generator.data[(N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_blocks_transfer_queue()) % INPUT_DATA_SIZE],
+												&input_data[(N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_blocks_transfer_queue()) % INPUT_DATA_SIZE],
 												N_BYTES_PRE_EXPANSION_PER_BLOCK, 
 												cudaMemcpyHostToDevice,
 												HtoDstream));

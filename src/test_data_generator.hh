@@ -8,14 +8,16 @@ class test_data_generator{
 		int source_batch_counter = 0;
 		beam_direction* sources;
 		bool use_source_catalog = false;
+		char *data;
 
 		int stride;
 	public:
-		char *data;
+		
 		test_data_generator();
 		~test_data_generator();
 
 		int get_n_pt_sources() const {return n_pt_sources;}
+		char * get_data() const {return data;}
 
 		void generate_test_data(antenna pos[], int gpu);
 		void read_in_source_directions(char * file_name);
@@ -50,9 +52,6 @@ void test_data_generator::read_in_source_directions(char * file_name){
 
 		#if VERBOSE
 		std::cout << "Read in " << n_pt_sources << " source directions" << std::endl;
-		for (int i = 0; i < 20; i++){
-			std::cout << "data: " << data[0] << ", " << std::endl;
-		}
 		#endif
 	}
 }
@@ -84,6 +83,10 @@ void test_data_generator::generate_test_data(antenna pos[], int gpu){
 				}
 			}
 		}
+	}
+
+	for (int i = 0; i < 20; i++){
+		std::cout << "data: " << data[0] << ", " << std::endl;
 	}
 
 	source_batch_counter ++;

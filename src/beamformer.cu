@@ -17,8 +17,9 @@ int main(int argc, char *argv[]){
 	bool dir_set = false;
 
 	#if DEBUG
-		beam_direction* sources = new beam_direction[N_PT_SOURCES]();  // Array to hold direction of the test sources
+		beam_direction* sources; //= new beam_direction[n_point_sources]();  // Array to hold direction of the test sources
 		bool use_source_catalog = false;
+		int n_pt_sources;
 	#endif
 
 
@@ -69,7 +70,9 @@ int main(int argc, char *argv[]){
 						fprintf (stderr, "beam: could not parse source direction file from %s\n", optarg);
 						return EXIT_FAILURE;
 					}
-					read_in_beam_directions(file_name, N_PT_SOURCES, sources, &use_source_catalog);
+					sources = read_in_source_directions(file_name, *n_pt_sources);
+					n_source_batches = CEILING(n_pt_sources, N_SOURCES_PER_BATCH);
+					use_source_catalog = true;
 					break;
 			#endif
 
@@ -90,7 +93,8 @@ int main(int argc, char *argv[]){
 					fprintf (stderr, "beam: could not parse antenna location file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
-				read_in_position_locations(file_name, pos, &pos_set);
+				read_in_position_locations(file_name, pos);
+				pos_set = true;
 				break;
 
 			case 'd':
@@ -99,7 +103,8 @@ int main(int argc, char *argv[]){
 					fprintf (stderr, "beam: could not parse direction file from %s\n", optarg);
 					return EXIT_FAILURE;
 				}
-				read_in_beam_directions(file_name, N_BEAMS, dir, &dir_set);
+				read_in_beam_directions(file_name, N_BEAMS, dir);
+				dir_set = true;
 				break;
 
 			case 'h':
@@ -142,18 +147,18 @@ int main(int argc, char *argv[]){
 	 ***********************************/
 
 	/* CUBLAS matrix dimensions */
-	int A_rows	 = N_BEAMS;
-	int A_cols 	 = N_ANTENNAS;
-	int A_stride = A_rows*A_cols;
+	int fourier_coefficients_rows	 = N_BEAMS;
+	int fourier_coefficients_cols 	 = N_ANTENNAS;
+	int fourier_coefficients_stride  = fourier_coefficients_rows*fourier_coefficients_cols;
 	int B_cols	 = N_TIMESTEPS_PER_GEMM;
-	int B_rows	 = A_cols;
+	int B_rows	 = fourier_coefficients_cols;
 	int B_stride = B_rows*B_cols;
-	int C_rows	 = A_rows;
+	int C_rows	 = fourier_coefficients_rows;
 	int C_cols	 = B_cols;
 	int C_stride = C_rows*C_cols;
 	float bw_per_channel = BW_PER_CHANNEL; 
 
-	CxInt8_t *d_A; 				// Weight matrix (N_BEAMS X N_ANTENNAS, for N_FREQUENCIES)
+	CxInt8_t *d_fourier_coefficients; 				// Weight matrix (N_BEAMS X N_ANTENNAS, for N_FREQUENCIES)
 	CxInt8_t *d_B; 				// Data Matrix (N_ANTENNAS X N_TIMESTEPS_PER_GEMM, for N_FREQUENCIES)
 	char *d_data;				// Raw input data (Before data massaging)
 	cuComplex *d_C;				// Beamformed output (N_BEAMS X N_TIMESTEPS_PER_GEMM, for N_FREQUENCIES)
@@ -189,7 +194,7 @@ int main(int argc, char *argv[]){
 		float *vec_ones = new float[N_FREQUENCIES]; 	// A vector of all ones for dedispersion (frequency averaging)
 
 		gpuErrchk(cudaHostAlloc( (void**) &data, INPUT_DATA_SIZE*sizeof(char), 0));
-		gpuErrchk(cudaHostAlloc( (void**) &dedispersed_out, N_BEAMS*N_PT_SOURCES*sizeof(float), 0));
+		gpuErrchk(cudaHostAlloc( (void**) &dedispersed_out, N_BEAMS*n_point_sources*sizeof(float), 0));
 
 		
 		if (!use_source_catalog){
@@ -208,15 +213,15 @@ int main(int argc, char *argv[]){
 	/***********************************
 	 *		Fourier Coefficients 	   *
 	 ***********************************/
-	CxInt8_t *A = new CxInt8_t[A_cols*A_rows*N_FREQUENCIES];
+	CxInt8_t *fourier_coefficients = new CxInt8_t[fourier_coefficients_cols*fourier_coefficients_rows*N_FREQUENCIES];
 
 	for (int i = 0; i < N_FREQUENCIES; i++){
 		float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*bw_per_channel;
 		float wavelength = C_SPEED/(1E9*freq);
 		for (int j = 0; j < N_ANTENNAS; j++){
 			for (int k = 0; k < N_BEAMS; k++){
-				A[i*A_stride + j*N_BEAMS + k].x = round(MAX_VAL*cos(-2*PI*(pos[j].x*sin(dir[k].theta) + pos[j].y*sin(dir[k].phi))/wavelength));
-				A[i*A_stride + j*N_BEAMS + k].y = round(MAX_VAL*sin(-2*PI*(pos[j].x*sin(dir[k].theta) + pos[j].y*sin(dir[k].phi))/wavelength));
+				fourier_coefficients[i*fourier_coefficients_stride + j*N_BEAMS + k].x = round(MAX_VAL*cos(-2*PI*(pos[j].x*sin(dir[k].theta) + pos[j].y*sin(dir[k].phi))/wavelength));
+				fourier_coefficients[i*fourier_coefficients_stride + j*N_BEAMS + k].y = round(MAX_VAL*sin(-2*PI*(pos[j].x*sin(dir[k].theta) + pos[j].y*sin(dir[k].phi))/wavelength));
 			}
 		}
 	}
@@ -229,7 +234,7 @@ int main(int argc, char *argv[]){
 
 	gpuErrchk(cudaHostAlloc( &beam_out, N_F_PER_DETECT*N_STREAMS*sizeof(float), 0));
 
-	gpuErrchk(cudaMalloc(&d_A, 		A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
+	gpuErrchk(cudaMalloc(&d_fourier_coefficients, 		fourier_coefficients_rows*fourier_coefficients_cols*N_FREQUENCIES*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_B, 		N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMalloc(&d_C, 		N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
 	gpuErrchk(cudaMalloc(&d_data, 	N_BYTES_PRE_EXPANSION_PER_BLOCK*N_BLOCKS_ON_GPU)); 							// array for raw data
@@ -240,9 +245,9 @@ int main(int argc, char *argv[]){
 	gpuErrchk(cudaMalloc(&d_zero, sizeof(cuComplex)));
 	
 	#if DEBUG
-		gpuErrchk(cudaMalloc(&d_vec_ones, 	N_FREQUENCIES*sizeof(float)));
-		gpuErrchk(cudaMalloc(&d_f_one, 		sizeof(float)));
-		gpuErrchk(cudaMalloc(&d_f_zero, 	sizeof(float)));
+		gpuErrchk(cudaMalloc(&d_vec_ones, 	 N_FREQUENCIES*sizeof(float)));
+		gpuErrchk(cudaMalloc(&d_f_one, 		 sizeof(float)));
+		gpuErrchk(cudaMalloc(&d_f_zero, 	 sizeof(float)));
 		gpuErrchk(cudaMalloc(&d_dedispersed, N_BEAMS*N_STREAMS*sizeof(float)));						// array for frequency averaged data
 	#endif
 
@@ -250,7 +255,7 @@ int main(int argc, char *argv[]){
 	 *			Memory Copies	 	   *
 	 ***********************************/
 
-	gpuErrchk(cudaMemcpy(d_A, A, A_rows*A_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice));
+	gpuErrchk(cudaMemcpy(d_fourier_coefficients, fourier_coefficients, fourier_coefficients_rows*fourier_coefficients_cols*N_FREQUENCIES*sizeof(CxInt8_t), cudaMemcpyHostToDevice));
 	gpuErrchk(cudaMemcpy(d_inv_max_value, &h_inv_max_value, sizeof(cuComplex), cudaMemcpyHostToDevice));
 	gpuErrchk(cudaMemcpy(d_zero, &h_zero, sizeof(cuComplex), cudaMemcpyHostToDevice));
 
@@ -271,7 +276,7 @@ int main(int argc, char *argv[]){
 	/* Zero out GPU memory with cudaMemset (this is helpful when the number of antennas != N_ANTENNAS) */
 	gpuErrchk(cudaMemset(d_B, 0,  	N_CX_IN_PER_GEMM*N_STREAMS*sizeof(CxInt8_t)));
 	gpuErrchk(cudaMemset(d_C, 0,  	N_CX_OUT_PER_GEMM*N_STREAMS*sizeof(cuComplex)));
-	gpuErrchk(cudaMemset(d_data, 0,  N_BYTES_PRE_EXPANSION_PER_BLOCK*N_BLOCKS_ON_GPU)); 		// array for raw data
+	gpuErrchk(cudaMemset(d_data, 0, N_BYTES_PRE_EXPANSION_PER_BLOCK*N_BLOCKS_ON_GPU)); 			// array for raw data
 	gpuErrchk(cudaMemset(d_out, 0,  N_F_PER_DETECT*N_STREAMS * sizeof(float)));					// array for detected, averaged data
 
 	#if DEBUG
@@ -369,6 +374,8 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG || VERBOSE
 		START_TIMER();
+		float time_accumulator_ms = 0;
+		float observation_time_ms = 0;
 	#endif
 
 
@@ -406,9 +413,12 @@ int main(int argc, char *argv[]){
 				if (use_source_catalog && (obs_state.get_blocks_transferred() == (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) ){
 					//Generates the dummy data given a set of directions.
 					std::cout << "Generating new source data" << std::endl;
-					generate_test_data(data, sources, pos, gpu, B_stride, source_batch_counter);
+					STOP_RECORD_TIMER(time_accumulator_ms);
+					obseration_time_ms += time_accumulator_ms;
+					generate_test_data(data, sources, n_pt_sources, pos, gpu, B_stride, source_batch_counter);
+					START_TIMER();
 					source_batch_counter ++;
-					if (source_batch_counter == N_SOURCE_BATCHES){
+					if (source_batch_counter == n_source_batches){
 						std::cout << "Program should be over soon" << std::endl;
 					}
 					std::cout << "done generating test data" << std::endl;
@@ -436,8 +446,8 @@ int main(int argc, char *argv[]){
 				 Check if transfers are done			   
 				 ***********************************/
 				obs_state.check_transfers_complete();
-				// if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= N_PT_SOURCES){
-				// 	 If the amount of data queued for transfer is greater than the amount needed for analyzing N_PT_SOURCES, stop 
+				// if (blocks_transfer_queue * N_GEMMS_PER_BLOCK >= n_point_sources){
+				// 	 If the amount of data queued for transfer is greater than the amount needed for analyzing n_point_sources, stop 
 				// 	transfers_complete = true;
 				// }
 
@@ -537,9 +547,9 @@ int main(int argc, char *argv[]){
 
 					/* Execute Beamforming Matrix Multiplication */
 					gpuBLASchk(cublasGemmStridedBatchedEx(handle[st], CUBLAS_OP_N, CUBLAS_OP_N,
-												A_rows, B_cols, A_cols,
+												fourier_coefficients_rows, B_cols, fourier_coefficients_cols,
 												d_inv_max_value,
-												d_A, CUDA_C_8I, A_rows, A_stride,
+												d_fourier_coefficients, CUDA_C_8I, fourier_coefficients_rows, fourier_coefficients_stride,
 												&d_B[N_CX_IN_PER_GEMM*st], CUDA_C_8I, B_rows, B_stride,
 												d_zero,
 												&d_C[N_CX_OUT_PER_GEMM*st], CUDA_C_32F, C_rows, C_stride,
@@ -558,7 +568,7 @@ int main(int argc, char *argv[]){
 
 					#if DEBUG
 						current_gemm = obs_state.get_current_analysis_gemm(timeSlice[st]);
-						if (current_gemm < N_PT_SOURCES){ // no need to copy more than the number of sources.
+						if (current_gemm < n_point_sources){ // no need to copy more than the number of sources.
 							std::cout << "Current GEMM: " << current_gemm << std::endl;
 
 							/* Sum over all 256 frequencies with a matrix-vector multiplication. */
@@ -618,7 +628,7 @@ int main(int argc, char *argv[]){
 		**************************************************/
 		obs_state.check_observations_complete();
 		// #if DEBUG
-		// 	if ((current_gemm >= N_PT_SOURCES-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
+		// 	if ((current_gemm >= n_point_sources-1) && (blocks_analyzed == blocks_transfer_queue) && transfers_complete){
 		// 		observation_complete = true;
 		// 		std::cout << "obs Complete" << std::endl;
 		// 		break;
@@ -637,17 +647,17 @@ int main(int argc, char *argv[]){
 
 
 	#if DEBUG
-		float observation_time_ms;
-		STOP_RECORD_TIMER(observation_time_ms);
+		STOP_RECORD_TIMER(time_accumulator_ms);
+		obseration_time_ms += time_accumulator_ms;
 		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 
-		std::cout << "Code produced outputs for " << N_PT_SOURCES*N_OUTPUTS_PER_GEMM << " data chunks.\n";
-		std::cout << "Time per data chunk: " << observation_time_ms/(N_PT_SOURCES*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
-		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*N_PT_SOURCES/observation_time_ms/1e6 << "GB/s" << std::endl;
+		std::cout << "Code produced outputs for " << n_point_sources*N_OUTPUTS_PER_GEMM << " data chunks.\n";
+		std::cout << "Time per data chunk: " << observation_time_ms/(n_point_sources*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
+		std::cout << "Approximate datarate: " << N_BYTES_PRE_EXPANSION_PER_GEMM*n_point_sources/observation_time_ms/1e6 << "GB/s" << std::endl;
 	#else
 		#if VERBOSE
-			float observation_time_ms;
-			STOP_RECORD_TIMER(observation_time_ms);
+			STOP_RECORD_TIMER(time_accumulator_ms);
+			obseration_time_ms += time_accumulator_ms;
 			std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 			std::cout << "Code produced outputs for " << obs_state.get_current_transfer_gemm()*N_OUTPUTS_PER_GEMM << " data chunks.\n";
 			std::cout << "Time per data chunk: " << observation_time_ms/(obs_state.get_current_transfer_gemm()*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";
@@ -667,7 +677,7 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		char filename[] = "bin/data.py";
-		write_array_to_disk_as_python_file(dedispersed_out, N_PT_SOURCES, N_BEAMS, filename);
+		write_array_to_disk_as_python_file(dedispersed_out, n_point_sources, N_BEAMS, filename);
 	#endif
 
 	std::cout << "Freeing CUDA Structures" << std::endl;
@@ -684,7 +694,7 @@ int main(int argc, char *argv[]){
 
 	std::cout << "Freed cuda streams and handles" << std::endl;
 
-	gpuErrchk(cudaFree(d_A));
+	gpuErrchk(cudaFree(d_fourier_coefficients));
 	gpuErrchk(cudaFree(d_B));
 	gpuErrchk(cudaFree(d_C));
 	gpuErrchk(cudaFree(d_data));
@@ -706,7 +716,7 @@ int main(int argc, char *argv[]){
 	// gpuErrchk(cudaHostUnregister(beam_out));
 	gpuErrchk(cudaFreeHost(beam_out));
 
-	delete[] A;
+	delete[] fourier_coefficients;
 	delete[] pos;
 	delete[] dir;
 	// delete[] beam_out;

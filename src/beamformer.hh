@@ -96,9 +96,9 @@
 #if DEBUG
 	// These constants define the number of test sources to use.
 	#define CEILING(x,y) (((x) + (y) - 1) / (y))
-	#define N_PT_SOURCES  3721			// Number of sources
+	// #define N_PT_SOURCES  3721			// Number of sources
 	#define N_SOURCES_PER_BATCH 1024	// Must be divisible by N_GEMMS_PER_BLOCK
-	#define N_SOURCE_BATCHES (CEILING(N_PT_SOURCES, N_SOURCES_PER_BATCH))
+	// #define N_SOURCE_BATCHES (CEILING(N_PT_SOURCES, N_SOURCES_PER_BATCH))
 #endif
 
 /***************************************************
@@ -186,10 +186,15 @@ public:
 	float y = 0;
 	float z = 0;
 	antenna(){}
+
+	friend std::istream & operator >> (std::istream &in, antenna &a);
 };
 
 
-
+std::istream & operator >> (std::istream &in, antenna &a){
+	in >> a.x >> a.y >> a.z; 	
+	return in;
+}
 
 
 class beam_direction{
@@ -199,10 +204,15 @@ public:
 	float phi = 0;
 	beam_direction(){}
 	beam_direction(float th, float ph) : theta(th), phi(ph) {}
+
+	friend std::istream & operator >> (std::istream &in, beam_direction &a);
 };
 
 
-
+std::istream & operator >> (std::istream &in, beam_direction &a){
+	in >> a.theta >> a.phi; 	
+	return in;
+}
 
 
 
@@ -429,7 +439,7 @@ void usage(){
 ***************************************************/
 
 #if DEBUG
-void generate_test_data(char *data, beam_direction sources[], antenna pos[], int gpu, int stride, int source_batch_counter){
+void generate_test_data(char *data, beam_direction sources[], int n_pt_sources, antenna pos[], int gpu, int stride, int source_batch_counter){
 	// float test_direction;
 	char high, low;
 	
@@ -444,7 +454,7 @@ void generate_test_data(char *data, beam_direction sources[], antenna pos[], int
 				for (int k = 0; k < N_ANTENNAS; k++){
 					int source_look_up = direction + source_batch_counter*N_SOURCES_PER_BATCH;
 
-					if (source_look_up < N_PT_SOURCES){
+					if (source_look_up < n_pt_sources){
 						high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(sources[source_look_up].theta) + pos[k].y*sin(sources[source_look_up].phi) )/wavelength))); //real
 						low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(sources[source_look_up].theta) + pos[k].y*sin(sources[source_look_up].phi) )/wavelength))); //imag
 
@@ -460,7 +470,25 @@ void generate_test_data(char *data, beam_direction sources[], antenna pos[], int
 
 #endif
 
-int read_in_beam_directions(char * file_name, int expected_beams, beam_direction* dir, bool * dir_set){
+
+beam_direction* read_in_source_directions(char * file_name, int *n_sources){
+	std::ifstream input_file;
+
+	input_file.open(file_name);
+
+	input_file >> *n_sources;
+	beam_direction* dir = new beam_direction[*n_sources]();  // Array to hold direction of the test sources
+
+
+	for (int beam_idx = 0; beam_idx < *n_sources; beam_idx++){
+		input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
+	}
+
+
+	return dir;
+}
+
+int read_in_beam_directions(char * file_name, int expected_beams, beam_direction* dir){
 	std::ifstream input_file;
 
 	input_file.open(file_name);
@@ -472,16 +500,14 @@ int read_in_beam_directions(char * file_name, int expected_beams, beam_direction
 	}
 
 	for (int beam_idx = 0; beam_idx < expected_beams; beam_idx++){
-		input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
+		// input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
+		input_file >> dir[beam_idx];
 	}
-	std::cout << std::endl;
-
-	*dir_set = true;
 	return 0;
 }
 
 
-int read_in_position_locations(char * file_name, antenna *pos, bool *pos_set){
+int read_in_position_locations(char * file_name, antenna *pos){
 	std::ifstream input_file;
 	input_file.open(file_name);
 	int nant;
@@ -492,11 +518,9 @@ int read_in_position_locations(char * file_name, antenna *pos, bool *pos_set){
 	}
 
 	for (int ant = 0; ant < N_ANTENNAS; ant++){
-		input_file >> pos[ant].x >> pos[ant].y >> pos[ant].z;
+		// input_file >> pos[ant].x >> pos[ant].y >> pos[ant].z;
+		input_file >> pos[ant];
 	}
-	std::cout << std::endl;
-
-	*pos_set = true;
 	return 0;
 }
 
@@ -560,8 +584,6 @@ void print_all_defines(void){
 	std::cout << "SIG_MAX_VAL: " << SIG_MAX_VAL << "\n";
 	std::cout << "N_STREAMS: " << N_STREAMS << "\n";
 	#if DEBUG
-		std::cout << "N_PT_SOURCES: " << N_PT_SOURCES << "\n";
-		std::cout << "N_SOURCE_BATCHES: "  << N_SOURCE_BATCHES << "\n";
 		std::cout << "N_SOURCES_PER_BATCH: "  << N_SOURCES_PER_BATCH << "\n";
 	#endif
 

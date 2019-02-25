@@ -19,7 +19,8 @@ int main(int argc, char *argv[]){
 	#if DEBUG
 		beam_direction* sources; //= new beam_direction[n_pt_sources]();  // Array to hold direction of the test sources
 		bool use_source_catalog = false;
-		int n_pt_sources;
+		int n_pt_sources = 1024;
+		int n_source_batches = 1;
 	#endif
 
 
@@ -71,7 +72,7 @@ int main(int argc, char *argv[]){
 						return EXIT_FAILURE;
 					}
 					sources = read_in_source_directions(file_name, &n_pt_sources);
-					int n_source_batches = CEILING(n_pt_sources, N_SOURCES_PER_BATCH);
+					n_source_batches = CEILING(n_pt_sources, N_SOURCES_PER_BATCH);
 					use_source_catalog = true;
 					break;
 			#endif
@@ -132,6 +133,7 @@ int main(int argc, char *argv[]){
 			dir[i].theta = i*DEG2RAD(2*HALF_FOV)/(N_BEAMS-1) - DEG2RAD(HALF_FOV);
 		}
 	}
+
 
 	#if VERBOSE
 		/* Print Information about all defined variables */
@@ -196,13 +198,11 @@ int main(int argc, char *argv[]){
 		gpuErrchk(cudaHostAlloc( (void**) &data, INPUT_DATA_SIZE*sizeof(char), 0));
 		gpuErrchk(cudaHostAlloc( (void**) &dedispersed_out, N_BEAMS*n_pt_sources*sizeof(float), 0));
 
-		
 		if (!use_source_catalog){
 			/* set memory to zero if a source catalog wasn't provided */
 			memset(data, BOGUS_DATA, INPUT_DATA_SIZE*sizeof(char)); // Generates Bogus data, typically 0x70
 			std::cout << "Using BOGUS DATA " << std::endl;
 		}
-
 		for (int i = 0; i < N_FREQUENCIES; i++){
 			/* Set data for a vector of all ones */
 			vec_ones[i] = 1.0;
@@ -407,7 +407,7 @@ int main(int argc, char *argv[]){
 					//Generates the dummy data given a set of directions.
 					std::cout << "Generating new source data" << std::endl;
 					STOP_RECORD_TIMER(time_accumulator_ms);
-					obseration_time_ms += time_accumulator_ms;
+					observation_time_ms += time_accumulator_ms;
 					generate_test_data(data, sources, n_pt_sources, pos, gpu, B_stride, source_batch_counter);
 					START_TIMER();
 					source_batch_counter ++;
@@ -641,7 +641,7 @@ int main(int argc, char *argv[]){
 
 	#if DEBUG
 		STOP_RECORD_TIMER(time_accumulator_ms);
-		obseration_time_ms += time_accumulator_ms;
+		observation_time_ms += time_accumulator_ms;
 		std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 
 		std::cout << "Code produced outputs for " << n_pt_sources*N_OUTPUTS_PER_GEMM << " data chunks.\n";
@@ -650,7 +650,7 @@ int main(int argc, char *argv[]){
 	#else
 		#if VERBOSE
 			STOP_RECORD_TIMER(time_accumulator_ms);
-			obseration_time_ms += time_accumulator_ms;
+			observation_time_ms += time_accumulator_ms;
 			std::cout << "Observation ran in " << observation_time_ms << "milliseconds.\n";
 			std::cout << "Code produced outputs for " << obs_state.get_current_transfer_gemm()*N_OUTPUTS_PER_GEMM << " data chunks.\n";
 			std::cout << "Time per data chunk: " << observation_time_ms/(obs_state.get_current_transfer_gemm()*N_OUTPUTS_PER_GEMM) << " milliseconds.\n";

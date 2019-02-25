@@ -115,7 +115,7 @@ public:
 
 	bool check_observations_complete();
 	#if DEBUG
-		void set_n_pt_sources(val){n_pt_sources = val;}
+		void set_n_pt_sources(int val){n_pt_sources = val;}
 		bool check_transfers_complete();
 	#endif
 

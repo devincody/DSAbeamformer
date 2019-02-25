@@ -325,13 +325,6 @@ int main(int argc, char *argv[]){
 		obs_state.set_n_pt_sources(input_data_generator.get_n_pt_sources());
 	#endif
 
-	#if DEBUG
-		int current_gemm = 0;
-		int source_batch_counter = 0;
-	#endif
-
-
-
 	/***************************************************
 	Initialize hdu (FOR DADA)
 	***************************************************/
@@ -339,7 +332,6 @@ int main(int argc, char *argv[]){
 	#ifndef DEBUG
 		char *block;
 		dada_handle.read_headers();
-		uint64_t block_size = dada_handle.get_block_size();
 	#endif
 
 
@@ -369,7 +361,7 @@ int main(int argc, char *argv[]){
 	#endif
 
 
-	while (!obs_state.get_observation_complete()){
+	while (!obs_state.check_observations_complete()){
 		
 		#if VERBOSE
 			/* Header to be printed during every loop */
@@ -517,7 +509,7 @@ int main(int argc, char *argv[]){
 					#if DEBUG
 						
 						if (obs_state.check_ready_for_dh2_transfer(timeSlice[st])){ // no need to copy more than the number of sources.
-							current_gemm = obs_state.get_current_analysis_gemm(timeSlice[st]);
+							int current_gemm = obs_state.get_current_analysis_gemm(timeSlice[st]);
 
 							std::cout << "Current GEMM: " << current_gemm << std::endl;
 
@@ -557,11 +549,6 @@ int main(int argc, char *argv[]){
 			Check if beamforming analysis has completed
 		**************************************************/
 		obs_state.check_analysis_events();
-
-		/**************************************************
-		Check if observations should be concluded
-		**************************************************/
-		obs_state.check_observations_complete();
 
 	} // end while (!observation_complete)
 

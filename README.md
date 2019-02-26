@@ -8,7 +8,7 @@ The Crab pulsar as imaged by DSA10.
 DSA is a 100-element radio interferometer located at the Owens Valley Radio Observatory (OVRO) in California. The purpose of this array is to detect and localize enigmatic pulses of radio energy known as fast radio bursts (FRBs).
 
 ## What does this code do?
-This is a collection of gpu-accelerated code which searches for FRBs in real time using beamforming. When run on RTX 2080 Ti devices, the code will produce 1 set of (256) beams every ~0.13 ms.
+This is a collection of gpu-accelerated code which searches for FRBs in real time using beamforming. When run on RTX 2080 Ti devices, the code will produce 1 set of (256) beams for (256) frequency bins every ~0.13 ms.
 
 ## Prerequisites
 You should have the following code packages installed before using DART:

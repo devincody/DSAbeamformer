@@ -167,9 +167,6 @@ typedef char char8_t[8]; //eight chars = 64-bit so global memory bandwidth usage
 typedef CxInt8_t cuChar4_t[4];
 
 
-
-
-
 class antenna{
 /* Class which manages the x, y, and z positions of each antenna */
 public:
@@ -217,7 +214,7 @@ std::ostream & operator << (std::ostream &out, beam_direction &a){
 
 
 /***************************************************
-				DADA
+				USAGE FUNCTIONS
 ***************************************************/
 
 
@@ -249,58 +246,6 @@ void usage(){
 /***************************************************
 				UTILITY FUNCTIONS
 ***************************************************/
-
-
-// #if DEBUG
-// void generate_test_data(char *data, beam_direction sources[], int n_pt_sources, antenna pos[], int gpu, int stride, int source_batch_counter){
-// 	// float test_direction;
-// 	char high, low;
-	
-// 	for (long direction = 0; direction < N_SOURCES_PER_BATCH; direction++){
-// 		//test_direction = DEG2RAD(-HALF_FOV) + ((float) direction)*DEG2RAD(2*HALF_FOV)/(N_PT_SOURCES-1);
-
-// 		for (int i = 0; i < N_FREQUENCIES; i++){
-// 			float freq = END_F - (ZERO_PT + gpu*TOT_CHANNELS/(N_GPUS-1) + i)*BW_PER_CHANNEL;
-// 			// std::cout << "freq: " << freq << std::endl;
-// 			float wavelength = C_SPEED/(1E9*freq);
-// 			for (int j = 0; j < N_TIMESTEPS_PER_GEMM; j++){
-// 				for (int k = 0; k < N_ANTENNAS; k++){
-// 					int source_look_up = direction + source_batch_counter*N_SOURCES_PER_BATCH;
-
-// 					if (source_look_up < n_pt_sources){
-// 						high = ((char) round(SIG_MAX_VAL*cos(2*PI*(pos[k].x*sin(sources[source_look_up].theta) + pos[k].y*sin(sources[source_look_up].phi) )/wavelength))); //real
-// 						low  = ((char) round(SIG_MAX_VAL*sin(2*PI*(pos[k].x*sin(sources[source_look_up].theta) + pos[k].y*sin(sources[source_look_up].phi) )/wavelength))); //imag
-
-// 						data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = (high << 4) | (0x0F & low);
-// 					} else {
-// 						data[direction*N_BYTES_PRE_EXPANSION_PER_GEMM + i*stride + j*N_ANTENNAS + k] = 0;
-// 					}
-// 				}
-// 			}
-// 		}
-// 	}
-// }
-
-// beam_direction* read_in_source_directions(char * file_name, int *n_sources){
-// 	std::ifstream input_file;
-
-// 	input_file.open(file_name);
-
-// 	input_file >> *n_sources;
-// 	beam_direction* dir = new beam_direction[*n_sources]();  // Array to hold direction of the test sources
-
-
-// 	for (int beam_idx = 0; beam_idx < *n_sources; beam_idx++){
-// 		input_file >> dir[beam_idx].theta >> dir[beam_idx].phi;
-// 	}
-
-
-// 	return dir;
-// }
-// #endif
-
-
-
 
 int read_in_beam_directions(char * file_name, int expected_beams, beam_direction* dir){
 	std::ifstream input_file;

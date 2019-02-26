@@ -149,7 +149,7 @@ dada_db -k baab -n 8 -b 268435456 -l -p # create new dada buffer
 
 The following template starts the system:
 ``` bash
-bin/beam [-k <buffer name> -c <cpu number> -g <gpu number> -p <position_filename> -d <direction_filename>]
+bin/beam -k <buffer name> -c <cpu number> -g <gpu number> -p <position_filename> -d <direction_filename>
 dada_junkdb -c <cpu number> -z -k <buffer name> -r <buffer fill rate (MB/s)> -t <fill time (s)> <header>
 ```
 Where the -k option gives the PSRDADA buffer key, the -c option picks which cpu will be used for psrdada, the -g option selects a frequency range between 0 and 7 inclusive, -p gives a filename which contains the number of antennas followed by the x, y, and z locations of the antennas, lastly the -d option points to a file which contains the number of beams to be produced followed by the theta, and phi directions of the beams in degrees.

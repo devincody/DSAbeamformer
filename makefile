@@ -29,14 +29,12 @@ junk:
 	dada_junkdb -c 0 -z -k baab -r 4050 -t 25 lib/correlator_header_dsaX.txt
 
 dada_buffers:
-	dada_db -d -k baab
+	-dada_db -d -k baab
 	dada_db -k baab -n 25 -b 134217728 -l -p
 
 clean:
-	-rm bin/beam;\
-	-dada_db -k baab -d;\
-	echo "killing: ";\
-	echo $$(ps aux | grep -e bin/beam | awk '{print $2}');\
-	echo "\n";\
-	-kill -9 $$(ps aux | grep -e bin/beam | awk '{print $2}');
+	-rm bin/beam
+	-dada_db -k baab -d
+	echo $$(ps aux | grep -e bin/beam | awk '{print $$2}')
+	-kill -9 $$(ps aux | grep -e bin/beam | awk '{print $$2}')
 

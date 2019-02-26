@@ -8,7 +8,7 @@ The Crab pulsar as imaged by DSA10.
 DSA is a 100-element radio interferometer located at the Owens Valley Radio Observatory (OVRO) in California. The purpose of this array is to detect and localize enigmatic pulses of radio energy known as fast radio bursts (FRBs).
 
 ## What does this code do?
-This is a collection of gpu-accelerated code which searches for FRBs in real time using beamforming. When run on GTX 1080 Ti devices, the code will produce 1 set of (256) beams every ~0.26 ms.
+This is a collection of gpu-accelerated code which searches for FRBs in real time using beamforming. When run on RTX 2080 Ti devices, the code will produce 1 set of (256) beams every ~0.13 ms.
 
 ## Prerequisites
 You should have the following code packages installed before using DART:
@@ -128,13 +128,16 @@ Lastly, we also define a condition for ending the observation -- namely if there
 
 ## Running the code
 
-There are several steps required to get the beamformer running.
+There are several modes in which the beamformer can be run. These modes can be turned on or off through both compile-time options and through command-line options.
 
-### Compilation and allocation of dada buffers
+### Observation mode
+This is the "normal" observation mode of operation for operating the beamformer. Generally, the template for preparing the system for execution is
 
-A makefile is provided to facilitate compilation. There are two options which can be used: `make verbose` and `make debug`. `make verbose` toggles print statements while `make debug` allows the user to input fake data which can be used to debug the system. 
+#### make verbose
+The `make verbose` mode enables many print statements which communicates state information about the program (see Real Time Theory of Operation above). 
 
-Generally, the template for preparing the system for execution is:
+#### make debug
+The `make debug` mode allows the user 
 
 ``` bash
 make #compile the code
@@ -147,7 +150,7 @@ make #compile the code
 dada_db -k baab -d # delete previous dada buffer
 dada_db -k baab -n 8 -b 268435456 -l -p # create new dada buffer
 ```
-The above commands are included in a bash script in `util/exe.sh`.
+
 
 ### Starting the system with psrdada (not debug mode)
 

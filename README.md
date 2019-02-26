@@ -160,26 +160,26 @@ bin/beam -k baab -c 0 -g 0
 dada_junkdb -c 0 -z -k baab -r 4050 -t 25 lib/correlator_header_dsaX.txt
 ```
 
-Here, the first line starts the script and the second starts filling the dada buffer. We have included a correlation header in the `lib` folder if you need one for testing purposes. Also, we have provided the following pithy command to execute the above dada_junkdb command.
+Here, the first line starts the script and the second starts filling the dada buffer. We have included a correlation header in the `lib` folder if you need one for testing purposes. Also, we have provided the following pithy command to execute the dada_junkdb line.
 
 ```bash
 make junk
 ```
 
 ### Debug mode
-The debug mode allows the user to provide test configurations for analysis on the device. In particular, the debug mode allows users to provide a file with listings of the directions of point sources which should be used to illuminate the array. Since PSRDADA is not used in this mode, compilation is accomplished with: `make debug`.
+The debug mode allows the user to provide test configurations for analysis on the device. In particular, the debug mode allows users to provide a file with listings of the directions of point sources which should be used to illuminate the array. Since PSRDADA is not used in this mode, compilation is simple: `make debug`.
 
 The following template starts the system:
 ``` bash
 bin/beam -g <gpu number> -p <position_filename> -d <direction_filename> -s <source_filename>
 ```
 
-Where the -g, -p, and -d options are identical to the ones described in Observation mode and the -s option provides the file with listed directions of point sources to be analyzed. If no file name is given, the program will simply fill the data buffer with whatever symbol is defined in the BOGUS_DATA macro.
+Where the -g, -p, and -d options are identical to the ones described in observation mode. The -s option provides the file with listed directions of point sources to be analyzed. If no file name is given, the program will simply fill the data buffer with whatever symbol is defined in the BOGUS_DATA macro.
 
-Debug mode also takes the additional step of summing across frequencies for each beam (i.e. dedispersing with a DM of 0) on the GPU. This allows for and easier comparison with the output of the python beamformer implementation. The resulting dedispered data is written to a python-importable file (data.py) which I've used for comparisons in the jupyter notebook file: `sandbox\2D beamformer.ipynb`.
+Debug mode also takes the additional step of summing across frequencies for each beam (i.e. dedispersing with a DM of 0) on the GPU. This allows for easier comparison with the output of the python beamformer implementation. The resulting dedispered data is written to a python-importable file (data.py) which can be used for comparisons in the jupyter notebook file: `sandbox\2D beamformer.ipynb`.
 
-#### fast debug mode
-Because generating test vectors can be time intensive (and generally nowhere near realtime), I used openMP to parallelize certain sections of the data generation on the CPU. The result is a ~4x speedup on Major. Fast debug mode simply compiles the code with the proper openMP flags (and -O3). Note that the Multiprocessing python library is used in a very similar way for the python beamformer implementation (Does not depend on fast debug mode). 
+#### Fast debug mode
+Because generating test vectors is highly CPU intensive (and generally nowhere near realtime), I used openMP to parallelize certain sections of the data generation. The result is a ~4x speedup on our test rig (Major). Fast debug mode simply compiles the code with the proper openMP flags (and -O3). The multiprocessing python library is used in a very similar way for the python beamformer implementation (Does not depend on fast debug mode). 
 
 This mode can be compiled with `make fast_debug`.
 

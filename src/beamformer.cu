@@ -376,19 +376,31 @@ int main(int argc, char *argv[]){
 
 		/* Data is copied iff the analysis steps and transfer rates are keeping up and there is still data */
 		if (obs_state.check_ready_for_transfer()){
-			#if DEBUG
-				/***********************************
-				IF debugging, copy from "data" array
-				***********************************/
-
-				#if VERBOSE 
-					std::cout << "VERBOSE: Async copy" << std::endl;
+			#ifndef DEBUG
+				#if VERBOSE
+					std::cout << "READING FROM PSRDADA" << std::endl;
 				#endif
+				
+				block = dada_handle.read();
 
+				if (!dada_handle.check_transfers_complete()){
+					
+					/* Copy Block */
+					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_next_gpu_transfer_block()],//(blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
+												block,
+												N_BYTES_PRE_EXPANSION_PER_BLOCK, 
+												cudaMemcpyHostToDevice,
+												HtoDstream));
 
-				/***********************************
-				 GENERATE TEST SIGNAL			   
-				 ***********************************/
+					/* Generate Cuda event which will indicate when the block has been transfered*/
+					obs_state.generate_transfer_event(HtoDstream);
+				} else {
+					obs_state.set_transfers_complete(true);
+				}
+
+				dada_handle.close();
+
+			#else
 				// if (use_source_catalog && (obs_state.get_blocks_transferred() == (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) ){
 				if(input_data_generator.check_need_to_generate_more_input_data(obs_state.get_blocks_transferred())){
 					//Generates the dummy data given a set of directions.
@@ -405,9 +417,6 @@ int main(int argc, char *argv[]){
 					std::cout << "done generating test data" << std::endl;
 				}
 
-				/***********************************
-				 Copy Block			   
-				 ***********************************/
 				// if (obs_state.get_blocks_transfer_queue() < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) {
 				if(input_data_generator.check_data_ready_for_transfer(obs_state.get_blocks_transfer_queue())){
 					/* Only initiate transfers if there is valid data in data[] */
@@ -427,36 +436,6 @@ int main(int argc, char *argv[]){
 				 Check if transfers are done			   
 				 ***********************************/
 				obs_state.check_transfers_complete();
-
-			#else
-				/***********************************
-					Else copy from PSRDADA block
-				***********************************/
-				#if VERBOSE
-					std::cout << "READING FROM PSRDADA" << std::endl;
-				#endif
-				
-
-				block = dada_handle.read();
-
-				// } else 
-				if (!dada_handle.check_transfers_complete()){
-					
-					/* Copy Block */
-					gpuErrchk(cudaMemcpyAsync(&d_data[N_BYTES_PRE_EXPANSION_PER_BLOCK * obs_state.get_next_gpu_transfer_block()],//(blocks_transfer_queue % N_BLOCKS_ON_GPU)], 
-												block,
-												N_BYTES_PRE_EXPANSION_PER_BLOCK, 
-												cudaMemcpyHostToDevice,
-												HtoDstream));
-
-					/* Generate Cuda event which will indicate when the block has been transfered*/
-					obs_state.generate_transfer_event(HtoDstream);
-				} else {
-					obs_state.set_transfers_complete(true);
-				}
-
-				/* Mark PSRDADA as read */
-				dada_handle.close();
 
 			#endif
 		}

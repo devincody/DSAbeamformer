@@ -126,18 +126,14 @@ With this model in mind, we can start developing rules to determine what actions
 
 Lastly, we also define a condition for ending the observation -- namely if there's no more valid data. This causes the program to leave the `while()` loop, free all the memory, and shut down.
 
+Most of this code is now implemented as part of the `observation_loop_state` class as defined in `observation_loop.hh`.
+
 ## Running the code
 
 There are several modes in which the beamformer can be run. These modes can be turned on or off through both compile-time options and through command-line options.
 
 ### Observation mode
-This is the "normal" observation mode of operation for operating the beamformer. Generally, the template for preparing the system for execution is
-
-#### make verbose
-The `make verbose` mode enables many print statements which communicates state information about the program (see Real Time Theory of Operation above). 
-
-#### make debug
-The `make debug` mode allows the user 
+This is the "normal" observation mode of operation for operating the beamformer. This mode reads from PSRDADA buffers, performs beamforming on the data and then writes the data back out to RAM (Note that writing out to the PSRDADA buffer has not yet been implemented). The general template for setting up the code and PSRDADA buffers is as follows:
 
 ``` bash
 make #compile the code
@@ -151,33 +147,44 @@ dada_db -k baab -d # delete previous dada buffer
 dada_db -k baab -n 8 -b 268435456 -l -p # create new dada buffer
 ```
 
-
-### Starting the system with psrdada (not debug mode)
-
 The following template starts the system:
 ``` bash
-bin/beam -k <buffer name> -c <cpu number> -g <gpu number> -p <position_filename> -d <direction_filename>
+bin/beam [-k <buffer name> -c <cpu number> -g <gpu number> -p <position_filename> -d <direction_filename>]
 dada_junkdb -c <cpu number> -z -k <buffer name> -r <buffer fill rate (MB/s)> -t <fill time (s)> <header>
 ```
+Where the -k option gives the PSRDADA buffer key, the -c option picks which cpu will be used for psrdada, the -g option selects a frequency range between 0 and 7 inclusive, -p gives a filename which contains the number of antennas followed by the x, y, and z locations of the antennas, lastly the -d option points to a file which contains the number of beams to be produced followed by the theta, and phi directions of the beams in degrees.
 
 For example:
 ``` bash
 bin/beam -k baab -c 0 -g 0
-dada_junkdb -c 0 -z -k baab -r 4000 -t 10 lib/correlator_header_dsaX.txt
+dada_junkdb -c 0 -z -k baab -r 4050 -t 25 lib/correlator_header_dsaX.txt
 ```
 
-Here, the first line starts the script and the second starts filling the dada buffer. Note that we have included a correlation header in the `lib` folder and the make file will execute the above junkdb command as per the example by calling the pithy command:
+Here, the first line starts the script and the second starts filling the dada buffer. We have included a correlation header in the `lib` folder if you need one for testing purposes. Also, we have provided the following pithy command to execute the above dada_junkdb command.
 
 ```bash
 make junk
 ```
 
-### Starting the system in debug mode
+### Debug mode
+The debug mode allows the user to provide test configurations for analysis on the device. In particular, the debug mode allows users to provide a file with listings of the directions of point sources which should be used to illuminate the array. Since PSRDADA is not used in this mode, compilation is accomplished with: `make debug`.
 
 The following template starts the system:
 ``` bash
 bin/beam -g <gpu number> -p <position_filename> -d <direction_filename> -s <source_filename>
 ```
+
+Where the -g, -p, and -d options are identical to the ones described in Observation mode and the -s option provides the file with listed directions of point sources to be analyzed. If no file name is given, the program will simply fill the data buffer with whatever symbol is defined in the BOGUS_DATA macro.
+
+Debug mode also takes the additional step of summing across frequencies for each beam (i.e. dedispersing with a DM of 0) on the GPU. This allows for and easier comparison with the output of the python beamformer implementation. The resulting dedispered data is written to a python-importable file (data.py) which I've used for comparisons in the jupyter notebook file: `sandbox\2D beamformer.ipynb`.
+
+#### fast debug mode
+Because generating test vectors can be time intensive (and generally nowhere near realtime), I used openMP to parallelize certain sections of the data generation on the CPU. The result is a ~4x speedup on Major. Fast debug mode simply compiles the code with the proper openMP flags (and -O3). Note that the Multiprocessing python library is used in a very similar way for the python beamformer implementation (Does not depend on fast debug mode). 
+
+This mode can be compiled with `make fast_debug`.
+
+### Verbose mode
+The Verbose mode enables many print statements which communicates state information about the program (see Real Time Theory of Operation above). Compilation and execution is exactly the same as in Observation mode, except compilation is done with `make verbose`.
 
 ## Demonstration of Correctness
 This system was prototyped in python (see for example `Beamformer Theory.ipynb`). Program correctness is determined exclusively in relation to the python implementation. 
@@ -193,7 +200,7 @@ The above figure shows a histogram of beam powers for the two images in the prev
 ## Future Work
 Right now, the beamforming is done using a single cuBlas call, however, this may not be the most efficient way of doing things. Here are some alternate approaches and thoughts on their potential success. 
 
-1. Use [Beanfarmer](https://github.com/ewanbarr/beanfarmer). Beanfarmer fuses the beamforming step with the detection step, effectively eliminating a costly trip to global memory. This, however, comes at the cost of increased complexity, reduced maintainability, and fewer opportunities for "free" upgrades with cuda library improvements (i.e. 4-bit arithmetic). 
+1. Use [Beanfarmer](https://github.com/ewanbarr/beanfarmer). Beanfarmer fuses the beamforming step with the detection step, effectively eliminating a costly trip to global memory. This, however, comes at the cost of increased complexity, reduced maintainability, and fewer opportunities for "free" upgrades with Cuda library improvements (i.e. 4-bit arithmetic). 
 2. Use [Cutlass](https://github.com/NVIDIA/cutlass) to enable 4-bit GEMM. Can also fuse detection step to the GEMM with the Cutlass `epilogue` functionality, although this doesn't eliminate the global memory trip since it doesn't appear possible to do averaging with `epilogue`.
 3. Use Facebook's [Tensor Comprehension Library](https://github.com/facebookresearch/TensorComprehensions) to implement a fused beamforming, detection, and averaging kernel which can be automatically tuned for maximum speed. It's unclear though, if the library can operate on the tensorcores.
 4. Use [openCL](https://www.khronos.org/opencl/). Enables access to low(er) cost GPUs via AMD, but again the tensorcores may not be available and requires significant rewrite cost.

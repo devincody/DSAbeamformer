@@ -25,11 +25,19 @@ You should have the following code packages installed before using DART:
 ## How does it work?
 
 ### Overview
-The code is split into 4 primary kernels:
+The flow of data within the program is shown in the image below:
+
+![Data Flow](https://github.com/devincody/DSAbeamformer/blob/master/images/Dataflow.PNG)
+
+The input data starts in CPU RAM (Grey rectangles) in either the block[] array or the data[] array depending on wheter PSRDADA is being used or not. The input data is then moved into GPU global memory (green rectangles) with a cudaMemcpy. Once on the GPU, the data is then processed by several kernels before written to disk. The kernels are:
+
 1. Data reordering
 2. 4-bit to 8-bit data expansion
 3. Beamforming
 4. Detection
+5. Dedispersion (DEBUG mode only)
+
+The next few sections give overviews of each of the kernels.
 
 ### Data reordering (Not currently implemented)
 Data (int4 + int4) arrives from FPGA snap boards with the following data indexing:
@@ -45,7 +53,7 @@ Time   X  Frequency X Time_Batch X Time X Polarization X Antenna X Real/Imag
 (cont.)      (256)	      (~3)      (16) 	     (2)	       (64) 	    (2)
 
 #### Data hierarchy
-The hierarchy of data in the gpu can be confusing, so a explanation is warranted. The basic unit of data that arrives from an FPGA is the dada block. Within the dada block, there is (depending on the configuration) enough data for multiple cuBlas GEMMs. Within a single cuBlas GEMM call, there's (typically) enough data for multiple time *outputs*. However, because we average multiple time *inputs* for each *output*, we also have a number of *inputs* for each output. Finally, within one *input* time step, we typically have complex data from 64 antennas, 2 polarizations, 256 frequencies. 
+The hierarchy of data in the gpu can be confusing, so a explanation is warranted. The basic unit of data that arrives from an FPGA is the dada block. Within the dada block, there is (depending on the configuration) enough data for multiple cuBLAS GEMMs. Within a single cuBLAS GEMM call, there's (typically) enough data for multiple time *outputs*. However, because we average multiple time *inputs* for each *output*, we also have a number of *inputs* for each output. Finally, within one *input* time step, we typically have complex data from 64 antennas, 2 polarizations, 256 frequencies. 
 
 ### 4-bit to 8-bit data conversion
 The GPU receives 4-bit data from the signal capture FPGAs. In order for the data to work with the gpu tensor cores, we need to convert this 4-bit data into 8-bit data. The following code accomplishes this:
@@ -104,6 +112,9 @@ We can next expand our data vector with multiple time steps (middle). While not 
 
 ### Detection and Averaging
 The data coming out of the beamforming step is a complex number corresponding to the voltage of every beam. To make a meaning full detection, we need to take the power of each beam. The detection step, executed by the `detect_sum()` cuda kernel, squares and sums the real and imaginary parts of each beam. It furthermore averages over 16 time samples to reduce the data rate.
+
+### Dedispersion (debug mode only)
+To reduce the amount of data which needs to be analyzed to demonstrate correct results (relative to the python implementation), the data is dedispersed (summed over frequency, i.e. DM of 0). This is accomplished with a matrix-vector multiplication (`cublasSgemv()`). 
 
 
 ## Real Time Theory of Operation

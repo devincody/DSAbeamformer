@@ -29,7 +29,9 @@ The flow of data within the program is shown in the image below:
 
 ![Data Flow](https://github.com/devincody/DSAbeamformer/blob/master/images/Dataflow.PNG)
 
-The input data starts in CPU RAM (Grey rectangles) in either the block[] array or the data[] array depending on wheter PSRDADA is being used or not. The input data is then moved into GPU global memory (green rectangles) with a cudaMemcpy. Once on the GPU, the data is then processed by several kernels before written to disk. The kernels are:
+The input data starts in CPU RAM (Grey rectangles) in either the block[] array or the data[] array depending on wheter PSRDADA is being used or not. The input data is then moved into GPU global memory (green rectangles) with a cudaMemcpy. Once on the GPU, the data is then processed by several kernels before written back to CPU RAM. The blue and orange arrows show the direction of data flow for DEBUG mode and Observation (PSRDADA) mode respectively. 
+
+The kernels are:
 
 1. Data reordering
 2. 4-bit to 8-bit data expansion

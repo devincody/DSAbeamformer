@@ -168,10 +168,10 @@ Where the -k option gives the PSRDADA buffer key, the -c option picks which cpu 
 For example:
 ``` bash
 bin/beam -k baab -c 0 -g 0
-dada_junkdb -c 0 -z -k baab -r 4050 -t 25 lib/correlator_header_dsaX.txt
+dada_junkdb -c 0 -z -k baab -r 4050 -t 25 config/correlator_header_dsaX.txt
 ```
 
-Here, the first line starts the script and the second starts filling the dada buffer. We have included a correlation header in the `lib` folder if you need one for testing purposes. Also, we have provided the following pithy command to execute the dada_junkdb line.
+Here, the first line starts the script and the second starts filling the dada buffer. We have included a correlation header in the `config` folder if you need one for testing purposes. Also, we have provided the following pithy command to execute the dada_junkdb line.
 
 ```bash
 make junk

@@ -26,7 +26,7 @@ beam: $(SRCDIR)/beamformer.cu
 	$(CC) -o $(BINDIR)/$@ $^ -I$(DADA_INCLUDE) -L$(DADA_LIB) $(CXXFLAGS) $(NVFLAGS)
 
 junk: 
-	dada_junkdb -c 0 -z -k baab -r 4050 -t 25 lib/correlator_header_dsaX.txt
+	dada_junkdb -c 0 -z -k baab -r 4050 -t 25 config/correlator_header_dsaX.txt
 
 dada_buffers:
 	-dada_db -d -k baab

@@ -1,8 +1,11 @@
 /*
  * Class that manages generation of data for testing the beamformer
+ *
+ * Data can be generated with bogus data or by specifying a set of source directions
+ * for which simulated data will be generated.
  */
 
-#define BOGUS_DATA 0x70
+#define BOGUS_DATA 0x70 // first four bits are real, second four are imaginary
 
 
 class test_data_generator{
@@ -12,7 +15,7 @@ class test_data_generator{
 		int source_batch_counter = 0;
 		beam_direction* sources = nullptr;
 		bool use_source_catalog = false;
-		char *data = nullptr;
+		char *data = nullptr; // pointer to data array
 
 	public:
 		
@@ -40,11 +43,8 @@ test_data_generator::~test_data_generator(){
 void test_data_generator::read_in_source_directions(char * file_name){
 	if (!use_source_catalog){
 		std::ifstream input_file;
-
 		input_file.open(file_name);
-
 		input_file >> n_pt_sources;
-
 		sources = new beam_direction[n_pt_sources]();  // Array to hold direction of the test sources
 
 		for (int beam_idx = 0; beam_idx < n_pt_sources; beam_idx++){
@@ -96,14 +96,14 @@ void test_data_generator::generate_test_data(antenna pos[], int gpu){
 
 
 bool test_data_generator::check_need_to_generate_more_input_data(int blocks_transfered){
+	// Data is only generated when using source catalog, otherwise this function shouldn't be called
 	return (use_source_catalog && (blocks_transfered == (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK) );
 }
 
 bool test_data_generator::check_data_ready_for_transfer(int blocks_transfer_queue){
 	if(!use_source_catalog && (source_batch_counter == 0)){
-		return true;
-	} else {	
-		return (blocks_transfer_queue < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK);
+		source_batch_counter = 1;
 	}
+	return (blocks_transfer_queue < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK);
 }
 

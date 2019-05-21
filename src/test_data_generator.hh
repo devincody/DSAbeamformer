@@ -1,3 +1,7 @@
+/*
+ * Class that manages generation of data for testing the beamformer
+ */
+
 #define BOGUS_DATA 0x70
 
 
@@ -96,6 +100,10 @@ bool test_data_generator::check_need_to_generate_more_input_data(int blocks_tran
 }
 
 bool test_data_generator::check_data_ready_for_transfer(int blocks_transfer_queue){
-	return (blocks_transfer_queue < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK);
+	if(!use_source_catalog && (source_batch_counter == 0)){
+		return true;
+	} else {	
+		return (blocks_transfer_queue < (source_batch_counter * N_SOURCES_PER_BATCH) / N_GEMMS_PER_BLOCK);
+	}
 }
 
